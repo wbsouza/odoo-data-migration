@@ -1,0 +1,26 @@
+[options]
+
+# Source Odoo Server (Odoo 11)
+[source]
+host = 127.0.0.1
+port = 7069
+database = odoo_source
+username = admin@mycompany.com
+password = Sup3rS3cr3t
+
+
+# Destination Odoo Server (Odoo 16)
+[destination]
+host = 127.0.0.1
+port = 8069
+database = odoo_source
+username = admin@mycompany.com
+password = Sup3rS3cr3t
+
+# Optional: Additional configuration options
+[settings]
+log_file = ./logs/migration.log
+log_level = info
+language = en_US
+company_id = 1
+
