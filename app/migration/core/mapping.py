@@ -107,7 +107,7 @@ class MappingProvider:
         """
         if model_name not in self.cache:
             self.cache[model_name] = {}
-        mapped_model = self.cache.get(model_name, {})
+        mapped_model = self.cache.get(model_name)
         return mapped_model.get(source_id)
 
     def set_mapping(self, model_name: str, source_id: int, dest_id: int):

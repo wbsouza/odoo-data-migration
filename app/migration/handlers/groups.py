@@ -67,12 +67,6 @@ class ResGroupsHandler(DomainHandler):
         """
         transformed_records = []
 
-
-
-
-
-
-
         # Prepare data for res.groups table
         group_data = {
             'name': record['name'],

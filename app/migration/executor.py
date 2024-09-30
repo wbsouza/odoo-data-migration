@@ -3,7 +3,8 @@ import logging
 from configparser import ConfigParser
 
 from .handlers.base import ResourceNotFoundException, HandlerNotFoundException
-from .handlers.users import ResUsersHandler
+from .handlers.res_users import ResUsersHandler
+# from .handlers.res_partner import ResPartnerHandler
 from .core.mapping import MappingProvider
 from .core.odoo import OdooConnection
 
@@ -29,9 +30,11 @@ class Migration:
 
         self.models_to_migrate = [
             'res.users',
+            # 'res.partner'
         ]
         self.models_handlers = {
             'res.users': ResUsersHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'res.partner': ResPartnerHandler(self.src_odoo, self.dst_odoo, self.mappings_provider)
         }
 
 
@@ -47,18 +50,25 @@ class Migration:
                 raise HandlerNotFoundException(f"There is no handler for the model {model_name}!")
 
             # Fetch records from the source system
-            records = handler.fetch_items(handler.src_odoo, model_name, order="id")
-            _logger.info(f"Fetched {len(records)} records for {model_name}. Applying transformations...")
+            eof = False
+            offset = 0
+            batch_size = 100
+            while not eof:
+                records = handler.fetch_items(handler.src_odoo, model_name, limit=batch_size, order="id")
+                eof = records is not None and len(records) < 1
+                if not eof:
+                    _logger.info(f"Fetched {len(records)} records for {model_name}. Applying transformations...")
+                    # Apply transformations
+                    transformed_records = []
+                    for record in records:
+                        transformed_records += handler.apply_transformations(record)
 
-            # Apply transformations
-            transformed_records = []
-            for record in records:
-                transformed_records += handler.apply_transformations(record)
+                    _logger.info(f"Transformations complete for {model_name}. Saving into destination...")
 
-            _logger.info(f"Transformations complete for {model_name}. Saving into destination...")
+                    # Insert transformed records into the destination
+                    handler.save_into_destination(transformed_records)
+                offset += batch_size
 
-            # Insert transformed records into the destination
-            handler.save_into_destination(transformed_records)
             _logger.info(f"Migration complete for {model_name}.")
         except ResourceNotFoundException as e:
             _logger.error(f"Error during migration of {model_name}: {str(e)}")

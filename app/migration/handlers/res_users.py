@@ -29,13 +29,19 @@ class ResUsersHandler(DomainHandler):
         :param src_group: The source category
         :return: The destination category ID.
         """
+        if src_group is None or len(src_group) < 1:
+            return None
 
-        if src_group is not None:
+        # try to find the source id in the cache first ...
+        result = self.mapping_provider.get_mapping('res.groups', src_group.id)
+        if not result:
             domain = [('name', '=', src_group['name'])]
             resp = self.dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
-                return resp[0]
-        return None
+                result = resp[0]
+                # update the cache with the respective id
+                self.mapping_provider.set_mapping('res.groups', src_group.id, result)
+        return result
 
     def user_exists(self, login: str) -> bool:
         domain = [('login', '=', login)]
@@ -43,39 +49,35 @@ class ResUsersHandler(DomainHandler):
         ids = model.search(domain, limit=1)
         return ids is not None and len(ids) > 0
 
-
-    def apply_transformations(self, record: Any) -> List[Dict]:
+    def apply_transformations(self, res_user_record: Any) -> List[Dict]:
 
         transformed_records = []
-        if self.user_exists(record.login):
+        if self.user_exists(res_user_record.login):
             user_dst_data = {
-                'login': record.login,
-                'old_id': record.id,
-                'name': record.name
+                'login': res_user_record.login,
+                'old_id': res_user_record.id,
+                'name': res_user_record.name
             }
-            transformed_records.append({ 'action': 'update', 'model': self.model_name, 'data': user_dst_data})
+            transformed_records.append({'action': 'update', 'model': self.model_name, 'data': user_dst_data})
 
         else:
 
+            # TODO: Fix the data inconsistencies on the source
             # dst_group_ids = []
-            # for src_group in record.groups_id:
+            # for src_group in res_user_record.groups_id:
             #     dst_group_id = self.find_dest_group_id(src_group)
             #     if dst_group_id is not None:
             #         dst_group_ids.append(dst_group_id)
 
-            # data = record.read()[0]
-            # sdata = json.dumps(data)
-            # print(sdata)
-
             user_dst_data = {
-                'name': record.name,
-                'login': record.login,
-                'email': record.email,
-                'company_id': record.company_id.id,
-                'lang': record.lang,
-                'tz': record.tz,
-                # 'groups_id': [(6, 0, dst_group_ids)],
-                'old_id': record.id
+                'name': res_user_record.name,
+                'login': res_user_record.login,
+                'email': res_user_record.email,
+                'company_id': res_user_record.company_id.id,
+                'lang': res_user_record.lang,
+                'tz': res_user_record.tz,
+                #'groups_id': [(6, 0, dst_group_ids)],
+                'old_id': res_user_record.id
             }
             transformed_records.append({'action': 'create', 'model': self.model_name, 'data': user_dst_data})
 
@@ -87,14 +89,15 @@ class ResUsersHandler(DomainHandler):
         This handles creating res.users in the destination Odoo (Odoo 16).
         """
         for record in transformed_records:
+
             model_name = record['model']
             data = record['data']
             action = record['action']
 
             src_model = self.src_odoo.session.env[self.model_name]
-            src_record = src_model.browse(data['old_id'])
-
             dst_model = self.dst_odoo.session.env[model_name]
+
+            src_record = src_model.browse(data['old_id'])
 
             if action == 'create':
                 logging.info(f"Creating user \"{src_record.login}\" ...")

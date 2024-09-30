@@ -39,7 +39,7 @@ class DomainHandler:
 
     def get_dst_model(self) -> Any:
         """Return the source Odoo model instance."""
-        return self.src_odoo.session.env[self.model_name]
+        return self.dst_odoo.session.env[self.model_name]
 
     def record_exists(self, odoo: OdooConnection, model_name: str, field: str, value: str) -> bool:
         """
