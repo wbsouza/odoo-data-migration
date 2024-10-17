@@ -9,7 +9,7 @@ from ..core.odoo import OdooConnection
 import json
 
 
-class ProductTemplateAttributeValueHandler(DomainHandler):
+class ProductTemplateAttributeLineHandler(DomainHandler):
 
     def __init__(self, src_odoo: OdooConnection, dst_odoo: OdooConnection, mapping_provider: MappingProvider):
         """
@@ -18,7 +18,7 @@ class ProductTemplateAttributeValueHandler(DomainHandler):
         :param dst_odoo: OdooConnection instance for the destination Odoo.
         :param mapping_provider: An instance of MappingProvider to handle ID mappings.
         """
-        super().__init__(src_odoo, dst_odoo, 'product.template.attribute.value')
+        super().__init__(src_odoo, dst_odoo, 'product.template.attribute.line')
         self.language = dst_odoo.language
         self.company_id = dst_odoo.company_id
         self.mapping_provider = mapping_provider
@@ -39,15 +39,12 @@ class ProductTemplateAttributeValueHandler(DomainHandler):
                 return resp[0]
         return None
 
-    def template_attribute_value_exists(self,
+    def template_attribute_line_exists(self,
                                         attribute_id: int,
-                                        product_tmpl_id: int, attribute_line_id: int,
-                                        product_attribute_value_id: int ) -> bool:
-        domain = ['&', '&', '&',
+                                        product_tmpl_id: int) -> bool:
+        domain = ['&',
                   ('attribute_id', '=', attribute_id),
                   ('product_tmpl_id', '=', product_tmpl_id),
-                  ('attribute_line_id', '=', attribute_line_id),
-                  ('product_attribute_value_id', '=', product_attribute_value_id)
                   ]
         model = self.dst_odoo.session.env[self.model_name]
         ids = model.search(domain, limit=1)
@@ -56,18 +53,14 @@ class ProductTemplateAttributeValueHandler(DomainHandler):
     def apply_transformations(self, record: Any) -> List[Dict]:
 
         transformed_records = []
-        if self.template_attribute_value_exists(record.attribute_id.id,
-                                                record.product_tmpl_id.id,
-                                                record.attribute_line_id.id,
-                                                record.product_attribute_value_id.id):
-            template_attribute_value_dst_data = {
-                'product_attribute_value_id': record.product_attribute_value_id.id,
-                'attribute_line_id': record.attribute_line_id.id,
+        if self.template_attribute_line_exists(record.attribute_id.id,
+                                                record.product_tmpl_id.id,):
+            template_attribute_line_dst_data = {
                 'product_tmpl_id': record.product_tmpl_id.id,
                 'attribute_id': record.attribute_id.id,
                 'old_id': record.id,
             }
-            transformed_records.append({ 'action': 'update', 'model': self.model_name, 'data': template_attribute_value_dst_data})
+            transformed_records.append({ 'action': 'update', 'model': self.model_name, 'data': template_attribute_line_dst_data})
 
         else:
 
@@ -81,15 +74,13 @@ class ProductTemplateAttributeValueHandler(DomainHandler):
             # sdata = json.dumps(data)
             # print(sdata)
 
-            template_attribute_value_dst_data = {
-                'product_attribute_value_id': record.product_attribute_value_id.id,
-                'attribute_line_id': record.attribute_line_id.id,
-                'product_tmpl_id': record.product_tmpl_id.id,
+            template_attribute_line_dst_data = {
                 'attribute_id': record.attribute_id.id,
+                'product_tmpl_id': record.product_tmpl_id.id,
                 # 'groups_id': [(6, 0, dst_group_ids)],
                 'old_id': record.id
             }
-            transformed_records.append({'action': 'create', 'model': self.model_name, 'data': template_attribute_value_dst_data})
+            transformed_records.append({'action': 'create', 'model': self.model_name, 'data': template_attribute_line_dst_data})
 
         return transformed_records
 
@@ -109,11 +100,11 @@ class ProductTemplateAttributeValueHandler(DomainHandler):
             dst_model = self.dst_odoo.session.env[model_name]
 
             if action == 'create':
-                logging.info(f"Creating attribute value \"{src_record.old_id}\" ...")
+                logging.info(f"Creating attribute line \"{src_record.old_id}\" ...")
                 new_id = dst_model.create(data)
                 src_record.write({'new_id': new_id})
             elif action == 'update':
-                logging.info(f"Updating attribute value \"{src_record.old_id}\" ...")
+                logging.info(f"Updating attribute line \"{src_record.old_id}\" ...")
                 dst_record = None
                 if src_record.new_id is not None and src_record.new_id > 0:
                     dst_record = dst_model.browse(src_record.new_id)

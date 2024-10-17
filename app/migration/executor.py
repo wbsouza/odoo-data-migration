@@ -9,6 +9,7 @@ from .handlers.base import ResourceNotFoundException, HandlerNotFoundException
 # from .handlers.product_attribute import ProductAttributeHandler
 from .handlers.product_category import ProductCategoryHandler
 from .handlers.product_attribute_value import ProductAttributeValueHandler
+from .handlers.product_template_attribute_value import ProductTemplateAttributeValueHandler
 # from .handlers.product_product import ProductProductHandler
 from .core.mapping import MappingProvider
 from .core.odoo import OdooConnection
@@ -40,6 +41,7 @@ class Migration:
             # 'product.attribute',
             'product.category',
             'product.attribute.value',
+            'product.template.attribute.value',
             # 'product.product',
         ]
         self.models_handlers = {
@@ -49,6 +51,7 @@ class Migration:
             # 'product.attribute': ProductAttributeHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             'product.category': ProductCategoryHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             'product.attribute.value': ProductAttributeValueHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            'product.template.attribute.value': ProductTemplateAttributeValueHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             # 'product.product': ProductProductHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
         }
 
