@@ -3,8 +3,13 @@ import logging
 from configparser import ConfigParser
 
 from .handlers.base import ResourceNotFoundException, HandlerNotFoundException
-from .handlers.res_users import ResUsersHandler
+# from .handlers.res_users import ResUsersHandler
 # from .handlers.res_partner import ResPartnerHandler
+# from .handlers.product_template import ProductTemplateHandler
+# from .handlers.product_attribute import ProductAttributeHandler
+from .handlers.product_category import ProductCategoryHandler
+from .handlers.product_attribute_value import ProductAttributeValueHandler
+# from .handlers.product_product import ProductProductHandler
 from .core.mapping import MappingProvider
 from .core.odoo import OdooConnection
 
@@ -29,12 +34,22 @@ class Migration:
         self.mappings_provider.load_mappings_from_database("res.groups", "name")
 
         self.models_to_migrate = [
-            'res.users',
-            # 'res.partner'
+            # 'res.users',
+            # 'res.partner',
+            # 'product.template',
+            # 'product.attribute',
+            'product.category',
+            'product.attribute.value',
+            # 'product.product',
         ]
         self.models_handlers = {
-            'res.users': ResUsersHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            # 'res.partner': ResPartnerHandler(self.src_odoo, self.dst_odoo, self.mappings_provider)
+            # 'res.users': ResUsersHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'res.partner': ResPartnerHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'product.template': ProductTemplateHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'product.attribute': ProductAttributeHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            'product.category': ProductCategoryHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            'product.attribute.value': ProductAttributeValueHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'product.product': ProductProductHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
         }
 
 
@@ -54,7 +69,7 @@ class Migration:
             offset = 0
             batch_size = 100
             while not eof:
-                records = handler.fetch_items(handler.src_odoo, model_name, limit=batch_size, order="id")
+                records = handler.fetch_items(handler.src_odoo, model_name, offset=offset,limit=batch_size, order="id")
                 eof = records is not None and len(records) < 1
                 if not eof:
                     _logger.info(f"Fetched {len(records)} records for {model_name}. Applying transformations...")

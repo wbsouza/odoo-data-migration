@@ -9,7 +9,7 @@ from ..core.odoo import OdooConnection
 import json
 
 
-class ResPartnerHandler(DomainHandler):
+class ProductProductHandler(DomainHandler):
 
     def __init__(self, src_odoo: OdooConnection, dst_odoo: OdooConnection, mapping_provider: MappingProvider):
         """
@@ -18,7 +18,7 @@ class ResPartnerHandler(DomainHandler):
         :param dst_odoo: OdooConnection instance for the destination Odoo.
         :param mapping_provider: An instance of MappingProvider to handle ID mappings.
         """
-        super().__init__(src_odoo, dst_odoo, 'res.partner')
+        super().__init__(src_odoo, dst_odoo, 'product.product')
         self.language = dst_odoo.language
         self.company_id = dst_odoo.company_id
         self.mapping_provider = mapping_provider
@@ -32,14 +32,15 @@ class ResPartnerHandler(DomainHandler):
         """
 
         if src_group is not None:
-            domain = [('name', '=', src_group['name'])]
+            domain = [('name', '=', src_group
+            ['name'])]
             resp = self.dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
 
-    def partner_exists(self, display_name: str) -> bool:
-        domain = [('display_name', '=', display_name)]
+    def product_exists(self, product_tmpl_id: int, default_code: str) -> bool:
+        domain = ['&', ('product_tmpl_id', '=', product_tmpl_id), ('default_code', '=', default_code)]
         model = self.dst_odoo.session.env[self.model_name]
         ids = model.search(domain, limit=1)
         return ids is not None and len(ids) > 0
@@ -47,13 +48,14 @@ class ResPartnerHandler(DomainHandler):
     def apply_transformations(self, record: Any) -> List[Dict]:
 
         transformed_records = []
-        if self.partner_exists(record.display_name):
-            partner_dst_data = {
-                'display_name': record.display_name,
+        if self.product_exists(record.product_tmpl_id.id, record.default_code):
+            product_dst_data = {
+                'product_tmpl_id': record.product_tmpl_id.id,
+
+                'default_code': record.default_code,
                 'old_id': record.id,
-                'name': record.name
             }
-            transformed_records.append({ 'action': 'update', 'model': self.model_name, 'data': partner_dst_data})
+            transformed_records.append({ 'action': 'update', 'model': self.model_name, 'data': product_dst_data})
 
         else:
 
@@ -67,24 +69,20 @@ class ResPartnerHandler(DomainHandler):
             # sdata = json.dumps(data)
             # print(sdata)
 
-            partner_dst_data = {
-                'name': record.name,
-                'display_name': record.display_name,
-                'email': record.email,
-                'company_id': record.company_id.id,
-                'lang': record.lang,
-                'tz': record.tz,
+            product_dst_data = {
+                'product_tmpl_id': record.product_tmpl_id.id,
+                'default_code': record.default_code,
                 # 'groups_id': [(6, 0, dst_group_ids)],
                 'old_id': record.id
             }
-            transformed_records.append({'action': 'create', 'model': self.model_name, 'data': partner_dst_data})
+            transformed_records.append({'action': 'create', 'model': self.model_name, 'data': product_dst_data})
 
         return transformed_records
 
     def save_into_destination(self, transformed_records: List[Dict]):
         """
         Save the transformed records in the destination system.
-        This handles creating res.partner in the destination Odoo (Odoo 16).
+        This handles creating product.product in the destination Odoo (Odoo 16).
         """
         for record in transformed_records:
             model_name = record['model']
@@ -97,16 +95,17 @@ class ResPartnerHandler(DomainHandler):
             dst_model = self.dst_odoo.session.env[model_name]
 
             if action == 'create':
-                logging.info(f"Creating partner \"{src_record.display_name}\" ...")
+                logging.info(f"Creating product \"{src_record.default_code}\" ...")
                 new_id = dst_model.create(data)
                 src_record.write({'new_id': new_id})
             elif action == 'update':
-                logging.info(f"Updating partner \"{src_record.display_name}\" ...")
+                logging.info(f"Updating product \"{src_record.default_code}\" ...")
                 dst_record = None
                 if src_record.new_id is not None and src_record.new_id > 0:
                     dst_record = dst_model.browse(src_record.new_id)
                 else:
-                    domain = [('display_name', '=', src_record.display_name)]
+                    domain = [('default_code', '=', src_record.default_code
+                               )]
                     result = dst_model.search(domain=domain, limit=1)
                     if result is not None and len(result) > 0:
                         dst_record = dst_model.browse(result[0])

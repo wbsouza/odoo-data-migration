@@ -4,18 +4,18 @@
 [source]
 host = 127.0.0.1
 port = 7069
-database = odoo_source
-username = admin@mycompany.com
-password = Sup3rS3cr3t
+database = odoo11
+username = admin
+password = admin
 
 
 # Destination Odoo Server (Odoo 16)
 [destination]
 host = 127.0.0.1
 port = 8069
-database = odoo_source
-username = admin@mycompany.com
-password = Sup3rS3cr3t
+database = odoo16
+username = admin
+password = admin
 
 # Optional: Additional configuration options
 [settings]
