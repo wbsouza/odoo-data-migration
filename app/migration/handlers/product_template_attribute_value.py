@@ -1,7 +1,6 @@
 import logging
 
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
-
 from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
 from ..core.odoo import OdooConnection
@@ -18,7 +17,7 @@ class ProductTemplateAttributeValueHandler(DomainHandler):
         :param dst_odoo: OdooConnection instance for the destination Odoo.
         :param mapping_provider: An instance of MappingProvider to handle ID mappings.
         """
-        super().__init__(src_odoo, dst_odoo, 'product.template.attribute.value')
+        super().__init__(src_odoo, dst_odoo, 'product.attribute.value')
         self.language = dst_odoo.language
         self.company_id = dst_odoo.company_id
         self.mapping_provider = mapping_provider
@@ -39,35 +38,34 @@ class ProductTemplateAttributeValueHandler(DomainHandler):
                 return resp[0]
         return None
 
-    def template_attribute_value_exists(self,
-                                        attribute_id: int,
-                                        product_tmpl_id: int, attribute_line_id: int,
-                                        product_attribute_value_id: int ) -> bool:
-        domain = ['&', '&', '&',
-                  ('attribute_id', '=', attribute_id),
-                  ('product_tmpl_id', '=', product_tmpl_id),
-                  ('attribute_line_id', '=', attribute_line_id),
-                  ('product_attribute_value_id', '=', product_attribute_value_id)
-                  ]
+    def template_attribute_value_exists(self, src_record: Any) -> bool:
+        domain = [('name', '=', src_record.name)]
         model = self.dst_odoo.session.env[self.model_name]
         ids = model.search(domain, limit=1)
         return ids is not None and len(ids) > 0
 
-    def apply_transformations(self, record: Any) -> List[Dict]:
+    def find_dst_attribute(self, src_record):
+        domain = [('name', '=', src_record.attribute_id.name)]
+        model = self.dst_odoo.session.env[self.model_name]
+        attribute = model.search(domain, limit=1)
+        return attribute
+
+    def apply_transformations(self, src_record: Any) -> List[Dict]:
 
         transformed_records = []
-        if self.template_attribute_value_exists(record.attribute_id.id,
-                                                record.product_tmpl_id.id,
-                                                record.attribute_line_id.id,
-                                                record.product_attribute_value_id.id):
-            template_attribute_value_dst_data = {
-                'product_attribute_value_id': record.product_attribute_value_id.id,
-                'attribute_line_id': record.attribute_line_id.id,
-                'product_tmpl_id': record.product_tmpl_id.id,
-                'attribute_id': record.attribute_id.id,
-                'old_id': record.id,
+        dst_attribute = self.find_dst_attribute(src_record)
+        if self.template_attribute_value_exists(src_record):
+            attribute_value_dst_data = {
+                'name': src_record.name,
+                'attribute_id': dst_attribute.id,
+                'old_id': src_record.id,
             }
-            transformed_records.append({ 'action': 'update', 'model': self.model_name, 'data': template_attribute_value_dst_data})
+            transformed_records.append({
+                'action': 'update',
+                'model': 'product.attribute.value',
+                'target': dst_attribute,
+                'data': attribute_value_dst_data
+            })
 
         else:
 
@@ -81,15 +79,19 @@ class ProductTemplateAttributeValueHandler(DomainHandler):
             # sdata = json.dumps(data)
             # print(sdata)
 
-            template_attribute_value_dst_data = {
-                'product_attribute_value_id': record.product_attribute_value_id.id,
-                'attribute_line_id': record.attribute_line_id.id,
-                'product_tmpl_id': record.product_tmpl_id.id,
-                'attribute_id': record.attribute_id.id,
+            attribute_value_dst_data = {
+                'product_attribute_value_id': src_record.product_attribute_value_id.id,
+                'attribute_line_id': src_record.attribute_line_id.id,
+                'product_tmpl_id': src_record.product_tmpl_id.id,
+                'attribute_id': src_record.attribute_id.id,
                 # 'groups_id': [(6, 0, dst_group_ids)],
-                'old_id': record.id
+                'old_id': src_record.id
             }
-            transformed_records.append({'action': 'create', 'model': self.model_name, 'data': template_attribute_value_dst_data})
+            transformed_records.append({
+                'action': 'create',
+                'model': self.model_name,
+                'data': attribute_value_dst_data
+            })
 
         return transformed_records
 
@@ -107,24 +109,16 @@ class ProductTemplateAttributeValueHandler(DomainHandler):
             src_record = src_model.browse(data['old_id'])
 
             dst_model = self.dst_odoo.session.env[model_name]
+            dst_template_attribute_value_model = self.dst_odoo.session.env['product.template.attribute.value']
 
             if action == 'create':
                 logging.info(f"Creating attribute value \"{src_record.old_id}\" ...")
                 new_id = dst_model.create(data)
+                product_template_attribute_value = new_id = dst_template_attribute_value_model.create(data)
                 src_record.write({'new_id': new_id})
             elif action == 'update':
                 logging.info(f"Updating attribute value \"{src_record.old_id}\" ...")
-                dst_record = None
-                if src_record.new_id is not None and src_record.new_id > 0:
-                    dst_record = dst_model.browse(src_record.new_id)
-                else:
-                    domain = [('name', '=', src_record.old_id
-                               )]
-                    result = dst_model.search(domain=domain, limit=1)
-                    if result is not None and len(result) > 0:
-                        dst_record = dst_model.browse(result[0])
-
-                if dst_record is not None:
-                    src_record.write({'new_id': dst_record.id})
-                    dst_record.write(data)
+                dst_record = record['target']
+                src_record.write({'new_id': dst_record.id})
+                dst_record.write(data)
 
