@@ -43,6 +43,13 @@ class ProductAttributeHandler(DomainHandler):
                 self.mapping_provider.set_mapping('res.groups', src_group.id, result)
         return result
 
+    def find_dst_attribute(self, record):
+        domain = [('name', '=', record.attribute_id.name)]
+        model = self.dst_odoo.session.env['product.attribute']
+        attribute_id = model.search(domain)
+        attribute = model.browse(attribute_id[0])
+        return attribute
+
     def attribute_exists(self, name: str) -> bool:
         domain = [('name', '=', name)]
         model = self.dst_odoo.session.env[self.model_name]

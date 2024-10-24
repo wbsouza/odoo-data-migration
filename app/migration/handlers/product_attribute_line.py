@@ -1,14 +1,11 @@
 import logging
-
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
-
 from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
 from ..core.odoo import OdooConnection
-
 import json
 
-class ProductTemplateAttributeLineHandler(DomainHandler):
+class ProductAttributeLineHandler(DomainHandler):
 
     def __init__(self, src_odoo: OdooConnection, dst_odoo: OdooConnection, mapping_provider: MappingProvider):
         """
@@ -29,7 +26,6 @@ class ProductTemplateAttributeLineHandler(DomainHandler):
         :param src_group: The source category
         :return: The destination category ID.
         """
-
         if src_group is not None:
             domain = [('name', '=', src_group
             ['name'])]
@@ -66,10 +62,24 @@ class ProductTemplateAttributeLineHandler(DomainHandler):
         ids = model.search(domain, limit=1)
         return ids is not None and len(ids) > 0
 
-    def apply_transformations(self, record: Any) -> List[Dict]:
+    def find_dst_attribute_value(self, record):
+        domain = [('name', '=', record.attribute_id.name)]
+        model = self.dst_odoo.session.env['product.attribute']
+        attribute_id = model.search(domain)
+        attribute = model.browse(attribute_id[0])
+        return attribute
 
+    def find_attribute_values(self, attribute):
+        domain = [('attribute_id', '=', attribute.id)]
+        model = self.dst_odoo.session.env['product.attribute.value']
+        attribute_values = model.search(domain)
+        return attribute_values
+
+
+    def apply_transformations(self, record: Any) -> List[Dict]:
         transformed_records = []
         attribute = self.find_dst_attribute(record)
+        values_ids = self.find_attribute_values(attribute)
         product_tmpl = self.find_dst_product_tmpl(record)
         if self.dst_template_attribute_line_exists(record):
             template_attribute_line_dst_data = {
@@ -95,7 +105,8 @@ class ProductTemplateAttributeLineHandler(DomainHandler):
                 'attribute_id': attribute.id,
                 'product_tmpl_id': product_tmpl.id,
                 # 'groups_id': [(6, 0, dst_group_ids)],
-                'old_id': record.id
+                'old_id': record.id,
+                'value_ids': [(6, 0, values_ids)],
             }
             transformed_records.append({'action': 'create', 'model': 'product.template.attribute.line', 'data': template_attribute_line_dst_data})
 
@@ -110,18 +121,16 @@ class ProductTemplateAttributeLineHandler(DomainHandler):
             model_name = record['model']
             data = record['data']
             action = record['action']
-
             src_model = self.src_odoo.session.env[self.model_name]
             src_record = src_model.browse(data['old_id'])
-
             dst_model = self.dst_odoo.session.env['product.template.attribute.line']
 
             if action == 'create':
-                logging.info(f"Creating attribute line \"{src_record.old_id}\" ...")
+                logging.info(f"Creating attribute line \"{src_record.product_tmpl_id.name, src_record.attribute_id.name, }\" ...")
                 new_id = dst_model.create(data)
                 src_record.write({'new_id': new_id})
             elif action == 'update':
-                logging.info(f"Updating attribute line \"{src_record.old_id}\" ...")
+                logging.info(f"Updating attribute line \"{src_record.product_tmpl_id.name, src_record.attribute_id.name, }\" ...")
                 dst_record = None
                 if src_record.new_id is not None and src_record.new_id > 0:
                     dst_record = dst_model.browse(src_record.new_id)
@@ -135,4 +144,3 @@ class ProductTemplateAttributeLineHandler(DomainHandler):
                 if dst_record is not None:
                     src_record.write({'new_id': dst_record.id})
                     dst_record.write(data)
-
