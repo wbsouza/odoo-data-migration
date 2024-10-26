@@ -36,9 +36,9 @@ class Migration:
         self.mappings_provider.load_mappings_from_database("res.groups", "name")
 
         self.models_to_migrate = [
-            'res.users',
-            'res.partner',
-            'product.template',
+            # 'res.users',
+            # 'res.partner',
+            # 'product.template',
             'product.attribute',
             'product.category',
             'product.attribute.value',
@@ -46,9 +46,9 @@ class Migration:
             # 'product.product',
         ]
         self.models_handlers = {
-            'res.users': ResUsersHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'res.partner': ResPartnerHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'product.template': ProductTemplateHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'res.users': ResUsersHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'res.partner': ResPartnerHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'product.template': ProductTemplateHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             'product.attribute': ProductAttributeHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             'product.category': ProductCategoryHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             'product.attribute.value': ProductAttributeValueHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),

@@ -50,72 +50,55 @@ class ProductAttributeHandler(DomainHandler):
         attribute = model.browse(attribute_id[0])
         return attribute
 
-    def attribute_exists(self, name: str) -> bool:
+    def find_product_attribute_by_name(self, name: str) -> bool:
         domain = [('name', '=', name)]
         model = self.dst_odoo.session.env[self.model_name]
         ids = model.search(domain, limit=1)
-        return ids is not None and len(ids) > 0
+        if ids is not None and len(ids):
+            return model.browse(ids[0])[0]
+        return None
 
-    def apply_transformations(self, record: Any) -> List[Dict]:
-
-        transformed_records = []
-        if self.attribute_exists(record.name):
-            attribute_dst_data = {
-                'old_id': record.id,
-                'name': record.name
+    def apply_transformations(self, src_record: Any) -> List[Dict]:
+        transformed_record = {
+            'action': 'create',
+            'model': 'product.attribute',
+            'src_record': src_record,
+            'dst_record': self.find_product_attribute_by_name(src_record.name),
+            'data': {
+                'name': src_record.name,
+                'sequence': src_record.sequence,
+                'display_type': src_record.type,
+                'old_id': src_record.id,
             }
-            transformed_records.append({'action': 'update', 'model': self.model_name, 'data': attribute_dst_data})
+        }
+        if src_record.create_variant:
+            transformed_record['data']['create_variant'] = 'always'
 
-        else:
+        # already exists ...
+        if transformed_record['dst_record'] is not None:
+            transformed_record['action'] = 'update'
 
-            # TODO: Fix the data inconsistencies on the source
-            # dst_group_ids = []
-            # for src_group in record.groups_id:
-            #     dst_group_id = self.find_dest_group_id(src_group)
-            #     if dst_group_id is not None:
-            #         dst_group_ids.append(dst_group_id)
-
-            attribute_dst_data = {
-                'name': record.name,
-                #'groups_id': [(6, 0, dst_group_ids)],
-                'old_id': record.id
-            }
-            transformed_records.append({'action': 'create', 'model': self.model_name, 'data': attribute_dst_data})
-
-        return transformed_records
+        return [transformed_record]
 
     def save_into_destination(self, transformed_records: List[Dict]):
         """
         Save the transformed records in the destination system.
         This handles creating product.attribute in the destination Odoo (Odoo 16).
         """
-        for record in transformed_records:
+        for transformed_record in transformed_records:
 
-            model_name = record['model']
-            data = record['data']
-            action = record['action']
-
-            src_model = self.src_odoo.session.env[self.model_name]
-            dst_model = self.dst_odoo.session.env[model_name]
-
-            src_record = src_model.browse(data['old_id'])
+            model_name = transformed_record['model']
+            data = transformed_record['data']
+            action = transformed_record['action']
+            src_record = transformed_record['src_record']
 
             if action == 'create':
+                dst_model = self.dst_odoo.session.env[model_name]
                 logging.info(f"Creating attribute \"{src_record.name}\" ...")
                 new_id = dst_model.create(data)
                 src_record.write({'new_id': new_id})
             elif action == 'update':
                 logging.info(f"Updating attribute \"{src_record.name}\" ...")
-                dst_record = None
-                if src_record.new_id is not None and src_record.new_id > 0:
-                    dst_record = dst_model.browse(src_record.new_id)
-                else:
-                    domain = [('name', '=', src_record.name)]
-                    result = dst_model.search(domain=domain, limit=1)
-                    if result is not None and len(result) > 0:
-                        dst_record = dst_model.browse(result[0])
-
-                if dst_record is not None:
-                    src_record.write({'new_id': dst_record.id})
-                    dst_record.write(data)
-
+                dst_record = transformed_record['dst_record']
+                dst_record.write(data)
+                src_record.write({'new_id': dst_record.id})

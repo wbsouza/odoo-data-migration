@@ -68,7 +68,7 @@ class ProductAttributeValueHandler(DomainHandler):
             transformed_records.append({
             'action': 'update',
             'model': 'product.attribute.value',
-            'target': dst_attribute_value,
+            'dst_record': dst_attribute_value,
             'data': attribute_value_dst_data
             })
 
@@ -121,6 +121,6 @@ class ProductAttributeValueHandler(DomainHandler):
 
             elif action == 'update':
                 logging.info(f"Updating attribute value \"{src_record.name}\" ...")
-                dst_record = record['target']
+                dst_record = record['dst_record']
                 src_record.write({'new_id': dst_record.id})
                 dst_record.write(data)
