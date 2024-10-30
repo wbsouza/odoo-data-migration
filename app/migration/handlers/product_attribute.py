@@ -67,7 +67,7 @@ class ProductAttributeHandler(DomainHandler):
             'data': {
                 'name': src_record.name,
                 'sequence': src_record.sequence,
-                'display_type': src_record.type,
+                # 'display_type': src_record.type,
                 'old_id': src_record.id,
             }
         }

@@ -39,6 +39,13 @@ class ProductProductHandler(DomainHandler):
                 return resp[0]
         return None
 
+    def find_dst_product_tmpl(self, src_record):
+        domain = [('name', '=', src_record.product_tmpl_id.name)]
+        model = self.dst_odoo.session.env['product.template']
+        attribute_id = model.search(domain)
+        attribute = model.browse(attribute_id[0])
+        return attribute
+
     def product_exists(self, product_tmpl_id: int, default_code: str) -> bool:
         domain = ['&', ('product_tmpl_id', '=', product_tmpl_id), ('default_code', '=', default_code)]
         model = self.dst_odoo.session.env[self.model_name]
@@ -46,11 +53,11 @@ class ProductProductHandler(DomainHandler):
         return ids is not None and len(ids) > 0
 
     def apply_transformations(self, record: Any) -> List[Dict]:
-
+        dst_product_tmpl = self.find_dst_product_tmpl(record)
         transformed_records = []
         if self.product_exists(record.product_tmpl_id.id, record.default_code):
             product_dst_data = {
-                'product_tmpl_id': record.product_tmpl_id.id,
+                'product_tmpl_id': dst_product_tmpl.id,
 
                 'default_code': record.default_code,
                 'old_id': record.id,
@@ -70,7 +77,7 @@ class ProductProductHandler(DomainHandler):
             # print(sdata)
 
             product_dst_data = {
-                'product_tmpl_id': record.product_tmpl_id.id,
+                'product_tmpl_id': dst_product_tmpl.id,
                 'default_code': record.default_code,
                 # 'groups_id': [(6, 0, dst_group_ids)],
                 'old_id': record.id
@@ -113,4 +120,3 @@ class ProductProductHandler(DomainHandler):
                 if dst_record is not None:
                     src_record.write({'new_id': dst_record.id})
                     dst_record.write(data)
-

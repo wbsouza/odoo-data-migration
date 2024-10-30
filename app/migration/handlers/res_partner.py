@@ -38,80 +38,57 @@ class ResPartnerHandler(DomainHandler):
                 return resp[0]
         return None
 
-    def partner_exists(self, display_name: str) -> bool:
-        domain = [('display_name', '=', display_name)]
+    def find_partner_by_name(self, name) -> bool:
+        domain = [('name', '=', name)]
         model = self.dst_odoo.session.env[self.model_name]
         ids = model.search(domain, limit=1)
-        return ids is not None and len(ids) > 0
+        if ids is not None and len(ids):
+            return model.browse(ids[0])[0]
+        return None
 
-    def apply_transformations(self, record: Any) -> List[Dict]:
-
-        transformed_records = []
-        if self.partner_exists(record.display_name):
-            partner_dst_data = {
-                'display_name': record.display_name,
-                'old_id': record.id,
-                'name': record.name
-            }
-            transformed_records.append({ 'action': 'update', 'model': self.model_name, 'data': partner_dst_data})
-
-        else:
-
-            # dst_group_ids = []
-            # for src_group in record.groups_id:
-            #     dst_group_id = self.find_dest_group_id(src_group)
-            #     if dst_group_id is not None:
-            #         dst_group_ids.append(dst_group_id)
-
-            # data = record.read()[0]
-            # sdata = json.dumps(data)
-            # print(sdata)
-
-            partner_dst_data = {
-                'name': record.name,
-                'display_name': record.display_name,
-                'email': record.email,
-                'company_id': record.company_id.id,
-                'lang': record.lang,
-                'tz': record.tz,
+    def apply_transformations(self, src_record: Any) -> List[Dict]:
+        transformed_record = {
+            'action': 'create',
+            'model': 'res.partner',
+            'src_record': src_record,
+            'dst_record': self.find_partner_by_name(src_record.name),
+            'data': {
+                'name': src_record.name,
+                'display_name': src_record.display_name,
+                'email': src_record.email,
+                'company_id': src_record.company_id.id,
+                'lang': src_record.lang,
+                'tz': src_record.tz,
                 # 'groups_id': [(6, 0, dst_group_ids)],
-                'old_id': record.id
+                'old_id': src_record.id
             }
-            transformed_records.append({'action': 'create', 'model': self.model_name, 'data': partner_dst_data})
+        }
 
-        return transformed_records
+        # already exists ...
+        if transformed_record['dst_record'] is not None:
+            transformed_record['action'] = 'update'
+
+        return [transformed_record]
 
     def save_into_destination(self, transformed_records: List[Dict]):
         """
         Save the transformed records in the destination system.
         This handles creating res.partner in the destination Odoo (Odoo 16).
         """
-        for record in transformed_records:
-            model_name = record['model']
-            data = record['data']
-            action = record['action']
+        for transformed_record in transformed_records:
 
-            src_model = self.src_odoo.session.env[self.model_name]
-            src_record = src_model.browse(data['old_id'])
-
-            dst_model = self.dst_odoo.session.env[model_name]
+            model_name = transformed_record['model']
+            data = transformed_record['data']
+            action = transformed_record['action']
+            src_record = transformed_record['src_record']
 
             if action == 'create':
-                logging.info(f"Creating partner \"{src_record.display_name}\" ...")
+                dst_model = self.dst_odoo.session.env[model_name]
+                logging.info(f"Creating partner \"{src_record.name}\" ...")
                 new_id = dst_model.create(data)
                 src_record.write({'new_id': new_id})
             elif action == 'update':
-                logging.info(f"Updating partner \"{src_record.display_name}\" ...")
-                dst_record = None
-                if src_record.new_id is not None and src_record.new_id > 0:
-                    dst_record = dst_model.browse(src_record.new_id)
-                else:
-                    domain = [('display_name', '=', src_record.display_name)]
-                    result = dst_model.search(domain=domain, limit=1)
-                    if result is not None and len(result) > 0:
-                        dst_record = dst_model.browse(result[0])
-
-                if dst_record is not None:
-                    src_record.write({'new_id': dst_record.id})
-                    dst_record.write(data)
-
+                logging.info(f"Updating partner \"{src_record.name}\" ...")
+                dst_record = transformed_record['dst_record']
+                dst_record.write(data)
+                src_record.write({'new_id': dst_record.id})

@@ -75,7 +75,6 @@ class ProductAttributeLineHandler(DomainHandler):
         attribute_values = model.search(domain)
         return attribute_values
 
-
     def apply_transformations(self, record: Any) -> List[Dict]:
         transformed_records = []
         attribute = self.find_dst_attribute(record)

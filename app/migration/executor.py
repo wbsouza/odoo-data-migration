@@ -3,13 +3,13 @@ import logging
 from configparser import ConfigParser
 
 from .handlers.base import ResourceNotFoundException, HandlerNotFoundException
-from .handlers.res_users import ResUsersHandler
-from .handlers.res_partner import ResPartnerHandler
-from .handlers.product_template import ProductTemplateHandler
+# from .handlers.res_users import ResUsersHandler
 from .handlers.product_attribute import ProductAttributeHandler
-from .handlers.product_category import ProductCategoryHandler
+# from .handlers.product_template import ProductTemplateHandler
+# from .handlers.product_category import ProductCategoryHandler
 from .handlers.product_attribute_value import ProductAttributeValueHandler
 from .handlers.product_attribute_line import ProductAttributeLineHandler
+# from .handlers.res_partner import ResPartnerHandler
 # from .handlers.product_template_attribute_value import ProductTemplateAttributeValueHandler
 # from .handlers.product_product import ProductProductHandler
 from .core.mapping import MappingProvider
@@ -40,7 +40,7 @@ class Migration:
             # 'res.partner',
             # 'product.template',
             'product.attribute',
-            'product.category',
+            # 'product.category',
             'product.attribute.value',
             'product.attribute.line',
             # 'product.product',
@@ -50,7 +50,7 @@ class Migration:
             # 'res.partner': ResPartnerHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             # 'product.template': ProductTemplateHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             'product.attribute': ProductAttributeHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'product.category': ProductCategoryHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'product.category': ProductCategoryHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             'product.attribute.value': ProductAttributeValueHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             'product.attribute.line': ProductAttributeLineHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             # 'product.product': ProductProductHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
