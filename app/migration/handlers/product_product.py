@@ -46,8 +46,8 @@ class ProductProductHandler(DomainHandler):
         attribute = model.browse(attribute_id[0])
         return attribute
 
-    def product_exists(self, product_tmpl_id: int, default_code: str) -> bool:
-        domain = ['&', ('product_tmpl_id', '=', product_tmpl_id), ('default_code', '=', default_code)]
+    def product_exists(self, product_tmpl_id: int, default_code: str, combination_indices: str) -> bool:
+        domain = ['&', ('product_tmpl_id', '=', product_tmpl_id), ('default_code', '=', default_code), ('combination_indices', '=', combination_indices)]
         model = self.dst_odoo.session.env[self.model_name]
         ids = model.search(domain, limit=1)
         return ids is not None and len(ids) > 0
@@ -55,10 +55,10 @@ class ProductProductHandler(DomainHandler):
     def apply_transformations(self, record: Any) -> List[Dict]:
         dst_product_tmpl = self.find_dst_product_tmpl(record)
         transformed_records = []
-        if self.product_exists(record.product_tmpl_id.id, record.default_code):
+        if self.product_exists(record.product_tmpl_id.id, record.default_code, record.combination_indices):
             product_dst_data = {
                 'product_tmpl_id': dst_product_tmpl.id,
-
+                'combination_indices': record.combination_indices,
                 'default_code': record.default_code,
                 'old_id': record.id,
             }

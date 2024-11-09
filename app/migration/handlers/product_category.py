@@ -47,15 +47,46 @@ class ProductCategoryHandler(DomainHandler):
             return model.browse(ids[0])[0]
         return None
 
+    def find_dst_parent_by_old_name(self, name):
+        domain = [('name', '=', name)]
+        model = self.dst_odoo.session.env[self.model_name]
+        ids = model.search(domain, limit=1)
+        if ids is not None and len(ids):
+            return model.browse(ids[0])[0]
+        return None
+
+    def create_parent_path(self, record):
+        parent_path = ''
+        divisions_number = record.complete_name.count('/')
+        if divisions_number == 0:
+            parent= self.find_dst_parent_by_old_name(record.name)
+            parent_path = f'{parent.id}/'
+        else:
+            names = record.complete_name.replace('/', ' ').split()
+            ids = []
+            for name in names:
+                parent = self.find_dst_parent_by_old_name(name)
+                if parent is not None:
+                    parent_path += f'{parent.id}/'
+                else:
+                    parent_path = None
+        return parent_path
+
+
     def apply_transformations(self, src_record: Any) -> List[Dict]:
+        dst_parent = None
+        if src_record.parent_id is not None:
+            dst_parent = self.find_dst_parent_by_old_name(src_record.parent_id.name)
         transformed_record = {
             'action': 'create',
             'model': 'product.category',
             'src_record': src_record,
             'dst_record': self.find_category_by_name(src_record.name),
             'data': {
+                'parent_id': dst_parent.id if dst_parent is not None else dst_parent,
                 'name': src_record.name,
                 'complete_name': src_record.complete_name,
+                'parent_path': self.create_parent_path(src_record),
                 # 'groups_id': [(6, 0, dst_group_ids)],
                 'old_id': src_record.id
             }

@@ -56,7 +56,6 @@ class ProductAttributeValueHandler(DomainHandler):
         if attribute_id is not None and len(attribute_id):
             return model.browse(attribute_id[0])[0]
         return None
-        return attribute_value
 
     def find_dst_attribute_value_by_name(self, name) -> bool:
         domain = [('name', '=', name)]
@@ -75,62 +74,16 @@ class ProductAttributeValueHandler(DomainHandler):
             'dst_record': self.find_dst_attribute_value_by_name(src_record.name),
             'data': {
             'name': src_record.name,
-            'attribute_id': src_record.attribute_id.id ,
+            'attribute_id': dst_attribute.id,
             'old_id': src_record.id,
             }
         }
-
-        if dst_attribute is not None:
-            transformed_record['attribute_id'] = dst_attribute.id,
 
         # already exists ...
         if transformed_record['dst_record'] is not None:
             transformed_record['action'] = 'update'
 
         return [transformed_record]
-    #
-    #
-    # def apply_transformations(self, src_record: Any) -> List[Dict]:
-    #     transformed_records = []
-    #
-    #     if self.template_attribute_value_exists(src_record):
-    #         dst_attribute_value = self.find_dst_attribute_value(src_record)
-    #         attribute_value_dst_data = {
-    #         'name': src_record.name,
-    #         'old_id': src_record.id,
-    #         }
-    #         transformed_records.append({
-    #         'action': 'update',
-    #         'model': 'product.attribute.value',
-    #         'dst_record': dst_attribute_value,
-    #         'data': attribute_value_dst_data
-    #         })
-    #
-    #     else:
-    #
-    #         # dst_group_ids = []
-    #         # for src_group in record.groups_id:
-    #         #     dst_group_id = self.find_dest_group_id(src_group)
-    #         #     if dst_group_id is not None:
-    #         #         dst_group_ids.append(dst_group_id)
-    #
-    #         # data = record.read()[0]
-    #         # sdata = json.dumps(data)
-    #         # print(sdata)
-    #
-    #         attribute_value_dst_data = {
-    #             'name': src_record.name,
-    #             'attribute_id': dst_attribute.id,
-    #             # 'groups_id': [(6, 0, dst_group_ids)],
-    #             'old_id': src_record.id
-    #         }
-    #         transformed_records.append({
-    #             'action': 'create',
-    #             'model': self.model_name,
-    #             'data': attribute_value_dst_data,
-    #         })
-    #
-    #     return transformed_records
 
     def save_into_destination(self, transformed_records: List[Dict]):
         """
