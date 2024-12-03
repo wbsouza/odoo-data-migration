@@ -75,6 +75,7 @@ class AccountMoveHandler(DomainHandler):
                 'journal_id': src_record.journal_id.id,
                 'date': str(src_record.date),
                 'ref': src_record.ref,
+                # 'line_ids': [(0, 0, line) for line in src_record.line_ids],
                 'old_id': src_record.id,
             }
         }
@@ -85,6 +86,60 @@ class AccountMoveHandler(DomainHandler):
 
         return [transformed_record]
 
+    def dict_invoice_lines(self, src_record):
+        data = {
+            'account_id': src_record.line_ids.account_id.id,
+            'amount_currency': src_record.line_ids.amount_currency,
+            'amount_residual': src_record.line_ids.amount_residual,
+            'amount_residual_currency': src_record.line_ids.amount_residual_currency,
+            'analytic_account_id': src_record.line_ids.analytic_account_id.id,
+            # 'analytic_line_ids': src_record.line_ids.analytic_line_ids,
+            # 'analytic_tag_ids': src_record.line_ids.analytic_tag_ids,
+            'balance': src_record.line_ids.balance,
+            'balance_cash_basis': src_record.line_ids.balance_cash_basis,
+            'blocked': src_record.line_ids.blocked,
+            'company_currency_id': src_record.line_ids.company_currency_id.id,
+            'company_id': src_record.line_ids.company_id.id,
+            'counterpart': src_record.line_ids.counterpart,
+            'credit': src_record.line_ids.credit,
+            'credit_cash_basis': src_record.line_ids.credit_cash_basis,
+            'currency_id': src_record.line_ids.currency_id.id,
+            # 'date': src_record.line_ids.date,
+            # 'date_maturity': src_record.line_ids.date_maturity,
+            'debit': src_record.line_ids.debit,
+            'debit_cash_basis': src_record.line_ids.debit_cash_basis,
+            'display_name': src_record.line_ids.display_name,
+            'full_reconcile_id': src_record.line_ids.full_reconcile_id.id,
+            'id': src_record.line_ids.id,
+            # 'ids': src_record.line_ids.ids,
+            'invoice_id': src_record.id,
+            'is_unaffected_earnings_line': src_record.line_ids.is_unaffected_earnings_line,
+            'journal_id': src_record.line_ids.journal_id.id,
+            # 'matched_credit_ids': src_record.line_ids.matched_credit_ids,
+            # 'matched_debit_ids': src_record.line_ids.matched_debit_ids,
+            'move_id': src_record.id,
+            'name': src_record.line_ids.name,
+            'narration': src_record.line_ids.narration,
+            'parent_state': src_record.line_ids.name,
+            'partner_id': src_record.line_ids.partner_id.id,
+            'payment_id': src_record.line_ids.payment_id.id,
+            'product_id': src_record.line_ids.product_id.id,
+            'product_uom_id': src_record.line_ids.product_uom_id.id,
+            'quantity': src_record.line_ids.quantity,
+            'reconciled': src_record.line_ids.reconciled,
+            'ref': src_record.line_ids.ref,
+            'statement_id': src_record.line_ids.statement_id.id,
+            'statement_line_id': src_record.line_ids.statement_line_id.id,
+            'tax_base_amount': src_record.line_ids.tax_base_amount,
+            'tax_exigible': src_record.line_ids.tax_exigible,
+            # 'tax_ids': src_record.line_ids.tax_ids,
+            'tax_line_id': src_record.line_ids.tax_line_id.id,
+            'user_type_id': src_record.line_ids.user_type_id.id,
+
+        }
+
+        return data
+
     def save_into_destination(self, transformed_records: List[Dict]):
         """
         Save the transformed records in the destination system.
@@ -92,7 +147,6 @@ class AccountMoveHandler(DomainHandler):
         """
         for transformed_record in transformed_records:
 
-            model_name = transformed_record['model']
             data = transformed_record['data']
             action = transformed_record['action']
             src_record = transformed_record['src_record']
@@ -100,8 +154,13 @@ class AccountMoveHandler(DomainHandler):
             if action == 'create':
                 dst_model = self.dst_odoo.session.env['account.move']
                 logging.info(f"Creating move \"{src_record.name}\" ...")
+                move_line = self.dict_invoice_lines(src_record)
+
+                data['line_ids'] = [(0, 0, move_line)],
                 new_id = dst_model.create(data)
                 src_record.write({'new_id': new_id})
+                # dst_move = self.find_account_move_by_name(src_record.name)
+                # dst_move.action_post()
             elif action == 'update':
                 logging.info(f"Updating move \"{src_record.name}\" ...")
                 dst_record = transformed_record['dst_record']
