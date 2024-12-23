@@ -60,7 +60,10 @@ class ProductCategoryHandler(DomainHandler):
         divisions_number = record.complete_name.count('/')
         if divisions_number == 0:
             parent= self.find_dst_parent_by_old_name(record.name)
-            parent_path = f'{parent.id}/'
+            if parent is None:
+                parent_path = f'{record.id}/'
+            if parent:
+                parent_path = f'{parent.id}/'
         else:
             names = record.complete_name.replace('/', ' ').split()
             ids = []

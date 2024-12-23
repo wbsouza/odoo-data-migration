@@ -63,6 +63,22 @@ class ProductAttributeLineHandler(DomainHandler):
             return model.browse(ids[0])[0]
         return None
 
+    def find_dst_product_by_product_tmpl(self, product_tmpl_id: int) -> bool:
+        domain = [('product_tmpl_id', '=', product_tmpl_id)]
+        model = self.dst_odoo.session.env['product.product']
+        ids = model.search(domain, order='id desc')
+        if ids is not None and len(ids):
+            return ids
+        return None
+
+    def find_src_product_by_product_tmpl(self, product_tmpl_id: int) -> bool:
+        domain = [('product_tmpl_id', '=', product_tmpl_id)]
+        model = self.src_odoo.session.env['product.product']
+        ids = model.search(domain, order='id desc')
+        if ids is not None and len(ids):
+            return ids
+        return None
+
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         dst_attribute = self.find_dst_attribute(src_record)
         values_ids = self.find_attribute_values(dst_attribute)
@@ -106,12 +122,27 @@ class ProductAttributeLineHandler(DomainHandler):
 
             if action == 'create':
                 logging.info(f"Creating attribute value \"{src_record.product_tmpl_id.name, src_record.attribute_id.name, }\" ...")
-                product_attribute_value = dst_model.create(data)
+                product_attribute_value_id = dst_model.create(data)
                 # product_template_attribute_value = product_attribute_value = dst_template_attribute_value_model.create(secondary_data)
-                src_record.write({'new_id': product_attribute_value})
+                src_record.write({'new_id': product_attribute_value_id})
 
             elif action == 'update':
                 logging.info(f"Updating attribute value \"{src_record.product_tmpl_id.name, src_record.attribute_id.name, }\" ...")
                 dst_record = record['dst_record']
                 src_record.write({'new_id': dst_record.id})
                 dst_record.write(data)
+                # dst_product_attribute_value = dst_model.browse(dst_record.id)
+                # src_product_attribute_value = src_model.browse(src_record.id)
+                # product_ids = self.find_dst_product_by_product_tmpl(dst_product_attribute_value.product_tmpl_id.id)
+                # src_product_ids = self.find_src_product_by_product_tmpl(src_product_attribute_value.product_tmpl_id.id)
+                # products = []
+                # src_products = []
+                # for product in product_ids:
+                #     products.append(self.dst_odoo.session.env['product.product'].browse(product))
+                # for product in src_product_ids:
+                #     src_product = self.src_odoo.session.env['product.product'].browse(product)
+                #     if src_product:
+                #         src_products.append(src_product)
+                #
+                # for i in range(len(products)):
+                #     products[i].default_code = src_products[i].default_code

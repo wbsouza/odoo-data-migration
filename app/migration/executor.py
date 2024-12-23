@@ -47,8 +47,8 @@ class Migration:
             'product.attribute.line',
             # 'product.template.attribute.value',
             # 'product.product',
-            'account.move',
-            'account.payment',
+            # 'account.move',
+            # 'account.payment',
         ]
         self.models_handlers = {
             'res.users': ResUsersHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
@@ -60,8 +60,8 @@ class Migration:
             'product.attribute.line': ProductAttributeLineHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
             # 'product.template.attribute.value': ProductTemplateAttributeValueHandler(self.src_odoo, self.dst_odoo,self.mappings_provider),
             # 'product.product': ProductProductHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'account.move': AccountMoveHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'account.payment': AccountPaymentHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'account.move': AccountMoveHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'account.payment': AccountPaymentHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
         }
 
 

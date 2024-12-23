@@ -71,7 +71,7 @@ class AccountMoveHandler(DomainHandler):
                 'amount_total': src_record.amount,
                 'partner_id': dst_partner.id if dst_partner is not None else None,
                 # 'state': src_record.state,
-                'currency_id': src_record.currency_id.id,
+                # 'currency_id': src_record.currency_id.id,
                 'journal_id': src_record.journal_id.id,
                 'date': str(src_record.date),
                 'ref': src_record.ref,
@@ -86,54 +86,63 @@ class AccountMoveHandler(DomainHandler):
 
         return [transformed_record]
 
-    def dict_invoice_lines(self, src_record):
+    def find_dst_product_by_default_code(self, product_tmpl_id: int, default_code: str) -> bool:
+        domain = ['&', ('product_tmpl_id', '=', product_tmpl_id), ('default_code', '=', default_code)]
+        model = self.dst_odoo.session.env['product.product']
+        ids = model.search(domain, limit=1)
+        if ids is not None and len(ids):
+            return model.browse(ids[0])[0]
+        return None
+
+    def dict_invoice_lines(self, line):
+        product = self.find_dst_product_by_default_code(line.product_id.product_tmpl_id.id, line.product_id.default_code)
         data = {
-            'account_id': src_record.line_ids.account_id.id,
-            'amount_currency': src_record.line_ids.amount_currency,
-            'amount_residual': src_record.line_ids.amount_residual,
-            'amount_residual_currency': src_record.line_ids.amount_residual_currency,
-            # 'analytic_account_id': src_record.line_ids.analytic_account_id.id,
-            # 'analytic_line_ids': src_record.line_ids.analytic_line_ids,
-            # 'analytic_tag_ids': src_record.line_ids.analytic_tag_ids,
-            'balance': src_record.line_ids.balance,
-            # 'balance_cash_basis': src_record.line_ids.balance_cash_basis,
-            'blocked': src_record.line_ids.blocked,
-            'company_currency_id': src_record.line_ids.company_currency_id.id,
-            'company_id': src_record.line_ids.company_id.id,
-            # 'counterpart': src_record.line_ids.counterpart,
-            'credit': src_record.line_ids.credit,
-            # 'credit_cash_basis': src_record.line_ids.credit_cash_basis,
-            'currency_id': src_record.line_ids.currency_id.id,
-            # 'date': src_record.line_ids.date,
-            # 'date_maturity': src_record.line_ids.date_maturity,
-            'debit': src_record.line_ids.debit,
-            # 'debit_cash_basis': src_record.line_ids.debit_cash_basis,
-            'display_name': src_record.line_ids.display_name,
-            'full_reconcile_id': src_record.line_ids.full_reconcile_id.id,
-            'id': src_record.line_ids.id,
-            # 'ids': src_record.line_ids.ids,
+            'account_id': line.account_id.id,
+            'amount_currency': line.amount_currency,
+            'amount_residual': line.amount_residual,
+            'amount_residual_currency': line.amount_residual_currency,
+            # 'analytic_account_id': line.analytic_account_id.id,
+            # 'analytic_line_ids': line.analytic_line_ids,
+            # 'analytic_tag_ids': line.analytic_tag_ids,
+            'balance': line.balance,
+            # 'balance_cash_basis': line.balance_cash_basis,
+            'blocked': line.blocked,
+            'company_currency_id': line.company_currency_id.id,
+            'company_id': line.company_id.id,
+            # 'counterpart': line.counterpart,
+            'credit': line.credit,
+            # 'credit_cash_basis': line.credit_cash_basis,
+            # 'currency_id': line.currency_id.id,
+            # 'date': line.date,
+            # 'date_maturity': line.date_maturity,
+            'debit': line.debit,
+            # 'debit_cash_basis': line.debit_cash_basis,
+            'display_name': line.display_name,
+            # 'full_reconcile_id': line.full_reconcile_id.id,
+            'id': line.id,
+            # 'ids': line.ids,
             # 'invoice_id': src_record.id,
-            # 'is_unaffected_earnings_line': src_record.line_ids.is_unaffected_earnings_line,
-            'journal_id': src_record.line_ids.journal_id.id,
-            # 'matched_credit_ids': src_record.line_ids.matched_credit_ids,
-            # 'matched_debit_ids': src_record.line_ids.matched_debit_ids,
-            'name': src_record.line_ids.name,
-            # 'narration': src_record.line_ids.narration,
-            # 'parent_state': src_record.line_ids.name,
-            'partner_id': src_record.line_ids.partner_id.id,
-            'payment_id': src_record.line_ids.payment_id.id,
-            'product_id': src_record.line_ids.product_id.id,
-            'product_uom_id': src_record.line_ids.product_uom_id.id,
-            'quantity': src_record.line_ids.quantity,
-            'reconciled': src_record.line_ids.reconciled,
-            'ref': src_record.line_ids.ref,
-            'statement_id': src_record.line_ids.statement_id.id,
-            'statement_line_id': src_record.line_ids.statement_line_id.id,
-            'tax_base_amount': src_record.line_ids.tax_base_amount,
-            # 'tax_exigible': src_record.line_ids.tax_exigible,
-            # 'tax_ids': src_record.line_ids.tax_ids,
-            'tax_line_id': src_record.line_ids.tax_line_id.id,
-            # 'user_type_id': src_record.line_ids.user_type_id.id,
+            # 'is_unaffected_earnings_line': line.is_unaffected_earnings_line,
+            'journal_id': line.journal_id.id,
+            # 'matched_credit_ids': line.matched_credit_ids,
+            # 'matched_debit_ids': line.matched_debit_ids,
+            'name': line.name,
+            # 'narration': line.narration,
+            # 'parent_state': line.name,
+            'partner_id': line.partner_id.id,
+            'payment_id': line.payment_id.id,
+            'product_id': product.id if product is not None else line.product_id.id,
+            'product_uom_id': line.product_uom_id.id,
+            'quantity': line.quantity,
+            'reconciled': line.reconciled,
+            'ref': line.ref,
+            'statement_id': line.statement_id.id,
+            'statement_line_id': line.statement_line_id.id,
+            'tax_base_amount': line.tax_base_amount,
+            # 'tax_exigible': line.tax_exigible,
+            # 'tax_ids': line.tax_ids,
+            'tax_line_id': line.tax_line_id.id,
+            # 'user_type_id': line.user_type_id.id,
 
         }
 
@@ -156,16 +165,22 @@ class AccountMoveHandler(DomainHandler):
             if action == 'create':
 
                 logging.info(f"Creating move \"{src_record.name}\" ...")
-                # move_lines = self.dict_invoice_lines(src_record)
-                # data['line_ids'] = [(0, 0, move_lines)],
+                move_lines = []
+                products = []
+                for line in src_record.line_ids:
+                    same_tmpl_products = self.find_dst_product_by_product_tmpl(line.product_id.product_tmpl_id.id)
+                    for product in same_tmpl_products:
+                        products.append(product)
+                    move_lines.append(self.dict_invoice_lines(line))
+                data['line_ids'] = [(0, 0, move_lines)],
                 new_id = dst_model.create(data)
-                # for move_line in move_lines:
-                #     move_lines['move_id'] = new_id
-                #     dst_line_model.create(move_lines)
+                for move_line in move_lines:
+                    move_line['move_id'] = new_id
+                    dst_line_model.create(move_line)
 
 
                 src_record.write({'new_id': new_id})
-                # dst_move = self.find_account_move_by_name(src_record.name)
+                dst_move = self.find_account_move_by_name(src_record.name)
                 # dst_move.action_post()
             elif action == 'update':
                 logging.info(f"Updating move \"{src_record.name}\" ...")
