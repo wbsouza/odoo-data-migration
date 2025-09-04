@@ -4,7 +4,7 @@ from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
 
 from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
-from ..core.odoo import OdooConnection
+from ..core.odoo_connection import OdooConnection
 
 import json
 
@@ -34,21 +34,21 @@ class ProductProductHandler(DomainHandler):
         if src_group is not None:
             domain = [('name', '=', src_group
             ['name'])]
-            resp = self.dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
 
     def find_dst_product_tmpl(self, src_record):
         domain = [('name', '=', src_record.product_tmpl_id.name)]
-        model = self.dst_odoo.session.env['product.template']
+        model = self._dst_odoo.session.env['product.template']
         attribute_id = model.search(domain)
         attribute = model.browse(attribute_id[0])
         return attribute
 
     def product_exists(self, product_tmpl_id: int, default_code: str, combination_indices: str) -> bool:
         domain = ['&', ('product_tmpl_id', '=', product_tmpl_id), ('default_code', '=', default_code), ('combination_indices', '=', combination_indices)]
-        model = self.dst_odoo.session.env[self.model_name]
+        model = self._dst_odoo.session.env[self.model_name]
         ids = model.search(domain, limit=1)
         return ids is not None and len(ids) > 0
 
@@ -60,7 +60,7 @@ class ProductProductHandler(DomainHandler):
                 'product_tmpl_id': dst_product_tmpl.id,
                 'combination_indices': record.combination_indices,
                 'default_code': record.default_code,
-                'old_id': record.id,
+                'x_old_id': record.id,
             }
             transformed_records.append({ 'action': 'update', 'model': self.model_name, 'data': product_dst_data})
 
@@ -80,7 +80,7 @@ class ProductProductHandler(DomainHandler):
                 'product_tmpl_id': dst_product_tmpl.id,
                 'default_code': record.default_code,
                 # 'groups_id': [(6, 0, dst_group_ids)],
-                'old_id': record.id
+                'x_old_id': record.id
             }
             transformed_records.append({'action': 'create', 'model': self.model_name, 'data': product_dst_data})
 
@@ -96,15 +96,15 @@ class ProductProductHandler(DomainHandler):
             data = record['data']
             action = record['action']
 
-            src_model = self.src_odoo.session.env[self.model_name]
-            src_record = src_model.browse(data['old_id'])
+            src_model = self._src_odoo.session.env[self.model_name]
+            src_record = src_model.browse(data['x_old_id'])
 
-            dst_model = self.dst_odoo.session.env[model_name]
+            dst_model = self._dst_odoo.session.env[model_name]
 
             if action == 'create':
                 logging.info(f"Creating product \"{src_record.default_code}\" ...")
                 new_id = dst_model.create(data)
-                src_record.write({'new_id': new_id})
+                src_record.write({'x_new_id': new_id})
             elif action == 'update':
                 logging.info(f"Updating product \"{src_record.default_code}\" ...")
                 dst_record = None
@@ -118,5 +118,5 @@ class ProductProductHandler(DomainHandler):
                         dst_record = dst_model.browse(result[0])
 
                 if dst_record is not None:
-                    src_record.write({'new_id': dst_record.id})
+                    src_record.write({'x_new_id': dst_record.id})
                     dst_record.write(data)

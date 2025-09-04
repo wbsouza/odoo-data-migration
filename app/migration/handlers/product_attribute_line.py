@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
 from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
-from ..core.odoo import OdooConnection
+from ..core.odoo_connection import OdooConnection
 import json
 
 class ProductAttributeLineHandler(DomainHandler):
@@ -29,35 +29,35 @@ class ProductAttributeLineHandler(DomainHandler):
         if src_group is not None:
             domain = [('name', '=', src_group
             ['name'])]
-            resp = self.dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
 
     def find_dst_product_tmpl(self, record):
         domain = [('name', '=', record.product_tmpl_id.name)]
-        model = self.dst_odoo.session.env['product.template']
+        model = self._dst_odoo.session.env['product.template']
         product_tmpl_id = model.search(domain)
         product_tmpl = model.browse(product_tmpl_id[0])
         return product_tmpl
 
     def find_dst_attribute(self, record):
         domain = [('name', '=', record.attribute_id.name)]
-        model = self.dst_odoo.session.env['product.attribute']
+        model = self._dst_odoo.session.env['product.attribute']
         attribute_id = model.search(domain)
         attribute = model.browse(attribute_id[0])
         return attribute
 
     def find_attribute_values(self, attribute):
         domain = [('attribute_id', '=', attribute.id)]
-        model = self.dst_odoo.session.env['product.attribute.value']
+        model = self._dst_odoo.session.env['product.attribute.value']
         attribute_values = model.search(domain)
         return attribute_values
 
     def find_dst_attribute_line_by_attribute_and_product_tmpl(self, attribute, product_tmpl) -> bool:
         domain = ['&', ('attribute_id', '=', attribute.id),
                       ('product_tmpl_id', '=', product_tmpl.id),]
-        model = self.dst_odoo.session.env['product.template.attribute.line']
+        model = self._dst_odoo.session.env['product.template.attribute.line']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -65,7 +65,7 @@ class ProductAttributeLineHandler(DomainHandler):
 
     def find_dst_product_by_product_tmpl(self, product_tmpl_id: int) -> bool:
         domain = [('product_tmpl_id', '=', product_tmpl_id)]
-        model = self.dst_odoo.session.env['product.product']
+        model = self._dst_odoo.session.env['product.product']
         ids = model.search(domain, order='id desc')
         if ids is not None and len(ids):
             return ids
@@ -73,7 +73,7 @@ class ProductAttributeLineHandler(DomainHandler):
 
     def find_src_product_by_product_tmpl(self, product_tmpl_id: int) -> bool:
         domain = [('product_tmpl_id', '=', product_tmpl_id)]
-        model = self.src_odoo.session.env['product.product']
+        model = self._src_odoo.session.env['product.product']
         ids = model.search(domain, order='id desc')
         if ids is not None and len(ids):
             return ids
@@ -93,7 +93,7 @@ class ProductAttributeLineHandler(DomainHandler):
                 'attribute_id': dst_attribute.id,
                 'product_tmpl_id': product_tmpl.id,
                 # 'groups_id': [(6, 0, dst_group_ids)],
-                'old_id': src_record.id,
+                'x_old_id': src_record.id,
                 'value_ids': [(6, 0, values_ids)],
             }
         }
@@ -115,21 +115,21 @@ class ProductAttributeLineHandler(DomainHandler):
             data = record['data']
             # secondary_data = record['secondary_data']
             action = record['action']
-            src_model = self.src_odoo.session.env['product.attribute.line']
-            src_record = src_model.browse(data['old_id'])
-            dst_model = self.dst_odoo.session.env['product.template.attribute.line']
-            # dst_template_attribute_value_model = self.dst_odoo.session.env['product.template.attribute.value']
+            src_model = self._src_odoo.session.env['product.attribute.line']
+            src_record = src_model.browse(data['x_old_id'])
+            dst_model = self._dst_odoo.session.env['product.template.attribute.line']
+            # dst_template_attribute_value_model = self._dst_odoo.session.env['product.template.attribute.value']
 
             if action == 'create':
                 logging.info(f"Creating attribute value \"{src_record.product_tmpl_id.name, src_record.attribute_id.name, }\" ...")
                 product_attribute_value_id = dst_model.create(data)
                 # product_template_attribute_value = product_attribute_value = dst_template_attribute_value_model.create(secondary_data)
-                src_record.write({'new_id': product_attribute_value_id})
+                src_record.write({'x_new_id': product_attribute_value_id})
 
             elif action == 'update':
                 logging.info(f"Updating attribute value \"{src_record.product_tmpl_id.name, src_record.attribute_id.name, }\" ...")
                 dst_record = record['dst_record']
-                src_record.write({'new_id': dst_record.id})
+                src_record.write({'x_new_id': dst_record.id})
                 dst_record.write(data)
                 # dst_product_attribute_value = dst_model.browse(dst_record.id)
                 # src_product_attribute_value = src_model.browse(src_record.id)
@@ -138,9 +138,9 @@ class ProductAttributeLineHandler(DomainHandler):
                 # products = []
                 # src_products = []
                 # for product in product_ids:
-                #     products.append(self.dst_odoo.session.env['product.product'].browse(product))
+                #     products.append(self._dst_odoo.session.env['product.product'].browse(product))
                 # for product in src_product_ids:
-                #     src_product = self.src_odoo.session.env['product.product'].browse(product)
+                #     src_product = self._src_odoo.session.env['product.product'].browse(product)
                 #     if src_product:
                 #         src_products.append(src_product)
                 #

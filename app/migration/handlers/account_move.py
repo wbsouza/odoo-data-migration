@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
 from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
-from ..core.odoo import OdooConnection
+from ..core.odoo_connection import OdooConnection
 import json
 
 
@@ -31,14 +31,14 @@ class AccountMoveHandler(DomainHandler):
         if src_group is not None:
             domain = [('name', '=', src_group
             ['name'])]
-            resp = self.dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
 
     def find_account_move_by_name(self, name):
         domain = [('name', '=', name)]
-        model = self.dst_odoo.session.env['account.move']
+        model = self._dst_odoo.session.env['account.move']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -46,7 +46,7 @@ class AccountMoveHandler(DomainHandler):
 
     def find_partner_by_name(self, name) -> bool:
         domain = [('name', '=', name)]
-        model = self.dst_odoo.session.env['res.partner']
+        model = self._dst_odoo.session.env['res.partner']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -76,7 +76,7 @@ class AccountMoveHandler(DomainHandler):
                 'date': str(src_record.date),
                 'ref': src_record.ref,
                 # 'line_ids': [(0, 0, line) for line in src_record.line_ids],
-                'old_id': src_record.id,
+                'x_old_id': src_record.id,
             }
         }
 
@@ -88,7 +88,7 @@ class AccountMoveHandler(DomainHandler):
 
     def find_dst_product_by_default_code(self, product_tmpl_id: int, default_code: str) -> bool:
         domain = ['&', ('product_tmpl_id', '=', product_tmpl_id), ('default_code', '=', default_code)]
-        model = self.dst_odoo.session.env['product.product']
+        model = self._dst_odoo.session.env['product.product']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -153,8 +153,8 @@ class AccountMoveHandler(DomainHandler):
         Save the transformed records in the destination system.
         This handles creating account.move in the destination Odoo (Odoo 16).
         """
-        dst_model = self.dst_odoo.session.env['account.move']
-        dst_line_model = self.dst_odoo.session.env['account.move.line']
+        dst_model = self._dst_odoo.session.env['account.move']
+        dst_line_model = self._dst_odoo.session.env['account.move.line']
 
         for transformed_record in transformed_records:
 
@@ -179,12 +179,12 @@ class AccountMoveHandler(DomainHandler):
                     dst_line_model.create(move_line)
 
 
-                src_record.write({'new_id': new_id})
+                src_record.write({'x_new_id': new_id})
                 dst_move = self.find_account_move_by_name(src_record.name)
                 # dst_move.action_post()
             elif action == 'update':
                 logging.info(f"Updating move \"{src_record.name}\" ...")
                 dst_record = transformed_record['dst_record']
                 dst_record.write(data)
-                src_record.write({'new_id': dst_record.id})
+                src_record.write({'x_new_id': dst_record.id})
 

@@ -1,10 +1,14 @@
 import logging
 
 from typing import List, Dict, Any
-from ..core.odoo import OdooConnection
 
+from ..core.db_connection import DBConnectionProvider
+from ..core.odoo_connection import OdooConnection, OdooConnectionProvider
 
 _logger = logging.getLogger(__name__)
+
+SOURCE = 'source'
+DESTINATION = 'destination'
 
 
 class HandlerNotFoundException(Exception):
@@ -21,47 +25,35 @@ class ResourceNotFoundException(Exception):
         super().__init__(self.message)
 
 
+
 class DomainHandler:
-    def __init__(self, src_odoo: OdooConnection, dst_odoo: OdooConnection, model_name: str):
-        """
-        Initialize the DomainHandler with source and destination Odoo connections and the model name.
-        :param src_odoo: OdooConnection instance for the source Odoo instance.
-        :param dst_odoo: OdooConnection instance for the destination Odoo instance.
-        :param model_name: The model name being handled (e.g., 'res.groups', 'res.users').
-        """
-        self.src_odoo = src_odoo
-        self.dst_odoo = dst_odoo
-        self.model_name = model_name
+
+    def __init__(self, odoo_provider: OdooConnectionProvider, db_provider: DBConnectionProvider, model_name: str):
+        self._odoo_provider = odoo_provider
+        self._db_provider = db_provider
+        self._src_odoo = odoo_provider.get_odoo_connection(SOURCE)
+        self._dst_odoo = odoo_provider.get_odoo_connection(DESTINATION)
+        self.src_model_name = model_name
 
     def get_src_model(self) -> Any:
-        """Return the source Odoo model instance."""
-        return self.src_odoo.session.env[self.model_name]
+        odoo_conn = self._odoo_provider.get_odoo_connection(SOURCE)
+        return odoo_conn.session.env[self.src_model_name]
+
+    def get_dst_model_name(self) -> Any:
+        return self.src_model_name
 
     def get_dst_model(self) -> Any:
-        """Return the source Odoo model instance."""
-        return self.dst_odoo.session.env[self.model_name]
+        odoo_conn = self._odoo_provider.get_odoo_connection(DESTINATION)
+        return odoo_conn.session.env[self.get_dst_model_name()]
 
-    def record_exists(self, odoo: OdooConnection, model_name: str, field: str, value: str) -> bool:
-        """
-        Check if a record with the given field-value pair already exists in the destination Odoo system.
-        :param odoo: The odoo connection.
-        :param model_name: The model name (e.g., 'res.partner', 'res.users').
-        :param field: The name of the field (e.g., 'name').
-        :param value: The value to search for in the field (e.g., 'John Doe').
-        :return: True if the record exists, False otherwise.
-        """
+    @staticmethod
+    def record_exists(odoo: OdooConnection, model_name: str, field: str, value: str) -> bool:
         model = odoo.session.env[model_name]
         domain = [(field, '=', value)]
         return bool(model.search(domain, limit=1))
 
-    def get_item(self, odoo: OdooConnection, model_name: str, _id: int) -> Dict:
-        """
-        Retrieve a specific record by its ID and convert it to a dictionary.
-        :param odoo: The odoo connection.
-        :param model_name: The model name (e.g., 'res.partner', 'res.users').
-        :param _id: The ID of the record.
-        :return: The record as a dictionary.
-        """
+    @staticmethod
+    def get_item(odoo: OdooConnection, model_name: str, _id: int) -> Dict:
         try:
             model = odoo.session.env[model_name]
             resp = model.browse(_id).read()[0]  # Ensure record is read and returned as a dict
@@ -71,18 +63,9 @@ class DomainHandler:
             _logger.error(str(ex))
             raise ResourceNotFoundException()
 
-    def fetch_items(self, odoo: OdooConnection, model_name: str, domain=None, offset: int = 0, order: str = None,
+    @staticmethod
+    def fetch_items(odoo: OdooConnection, model_name: str, domain=None, offset: int = 0, order: str = None,
                     limit: int = 100) -> List[Dict]:
-        """
-        Retrieve a list of records based on a search domain and convert them to dictionaries.
-        :param odoo: The odoo connection.
-        :param model_name: The model name (e.g., 'res.partner', 'res.users').
-        :param domain: The search domain.
-        :param offset: The offset for pagination.
-        :param limit: The number of records to retrieve.
-        :param order: The order for sorting the results.
-        :return: A list of records as dictionaries.
-        """
         result = []
         domain = [] if domain is None else domain
         model = odoo.session.env[model_name]
@@ -107,3 +90,35 @@ class DomainHandler:
         :param transformed_records: A list of transformed records.
         """
         raise NotImplementedError("Subclasses should implement this method.")
+
+    def _update_tracking_id(self, connection_type, model_name, record_id, field_name, field_value):
+        try:
+            conn = self._db_provider.get_connection(connection_type)
+            conn.autocommit = True
+            cursor = conn.cursor()
+            table_name = model_name.replace('.', '_')
+            sql = f'UPDATE {table_name} SET {field_name} = {field_value} WHERE id={record_id}'
+            cursor.execute(sql)
+            cursor.close()
+            return True
+        except Exception as ex:
+            _logger.error(f"Failed to update tracking id: {ex}")
+            return False
+
+    def update_tracking_ids(self, new_id: int, src_record: Any):
+        result = self._update_tracking_id(
+            connection_type=SOURCE,
+            model_name=self.src_model_name,
+            field_name='x_new_id',
+            field_value=new_id,
+            record_id=src_record.id
+        )
+        if result:
+            self._update_tracking_id(
+                connection_type=DESTINATION,
+                model_name=self.get_dst_model_name(),
+                field_name='x_old_id',
+                field_value=src_record.id,
+                record_id=new_id
+            )
+        return result

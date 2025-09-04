@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
 from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
-from ..core.odoo import OdooConnection
+from ..core.odoo_connection import OdooConnection
 import json
 
 
@@ -31,14 +31,14 @@ class AccountPaymentHandler(DomainHandler):
         if src_group is not None:
             domain = [('name', '=', src_group
             ['name'])]
-            resp = self.dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
 
     def find_account_payment(self, id):
         domain = [('move_id', '=', id)]
-        model = self.dst_odoo.session.env['account.payment']
+        model = self._dst_odoo.session.env['account.payment']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -46,7 +46,7 @@ class AccountPaymentHandler(DomainHandler):
 
     def find_partner_by_name(self, name) -> bool:
         domain = [('name', '=', name)]
-        model = self.dst_odoo.session.env['res.partner']
+        model = self._dst_odoo.session.env['res.partner']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -55,7 +55,7 @@ class AccountPaymentHandler(DomainHandler):
 
     def find_move_by_name(self, name) -> bool:
         domain = [('name', '=', name)]
-        model = self.dst_odoo.session.env['account.move']
+        model = self._dst_odoo.session.env['account.move']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -86,7 +86,7 @@ class AccountPaymentHandler(DomainHandler):
                 'payment_token_id': src_record.payment_token_id.id,
                 'payment_transaction_id': src_record.payment_transaction_id.id,
                 'payment_type': src_record.payment_type,
-                'old_id': src_record.id,
+                'x_old_id': src_record.id,
             }
         }
 
@@ -109,12 +109,12 @@ class AccountPaymentHandler(DomainHandler):
             src_record = transformed_record['src_record']
             move = self.find_move_by_name(src_record.move_name)
             if action == 'create':
-                dst_model = self.dst_odoo.session.env['account.payment']
+                dst_model = self._dst_odoo.session.env['account.payment']
                 logging.info(f"Creating payment for move \"{move.name}\" ...")
                 new_id = dst_model.create(data)
-                src_record.write({'new_id': new_id})
+                src_record.write({'x_new_id': new_id})
             elif action == 'update':
                 logging.info(f"Updating payment for move \"{move.name}\" ...")
                 dst_record = transformed_record['dst_record']
                 dst_record.write(data)
-                src_record.write({'new_id': dst_record.id})
+                src_record.write({'x_new_id': dst_record.id})

@@ -1,1 +1,2 @@
 odoorpc
+psycopg2-binary

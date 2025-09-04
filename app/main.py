@@ -2,8 +2,10 @@ import configparser
 import os
 import logging
 
+from migration.core.db_changes import create_tracking_fields
 
-from migration.core.odoo import OdooConnection
+
+from migration.core.odoo_connection import OdooConnection
 from migration.executor import Migration
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -65,21 +67,13 @@ def main():
         # Initialize source and destination Odoo connections from the config file
         configs = get_configs(f"{_BASE_DIR}/migration.conf")
         setup_logging(configs)
-        logging.info("Starting the Odoo migration process...")
-
-        src_odoo = OdooConnection(configs, connection_type="source")
-        dst_odoo = OdooConnection(configs, connection_type="destination")
-
-        # Connect to both Odoo instances
-        src_odoo.connect()
-        dst_odoo.connect()
     except Exception as e:
         logging.error(f"Failed to initialize Odoo connections: {str(e)}")
         return
 
     # Create the Migration instance
     mappings_dir = f"{_BASE_DIR}/mappings"
-    migration = Migration(configs, src_odoo, dst_odoo, mappings_dir)
+    migration = Migration(configs, mappings_dir)
 
     # Start the migration process
     migration.run()

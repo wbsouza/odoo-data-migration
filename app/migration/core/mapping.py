@@ -4,14 +4,14 @@ import abc
 
 from configparser import ConfigParser
 
-from ..core.odoo import OdooConnection
+from ..core.odoo_connection import OdooConnection, OdooConnectionProvider, SOURCE, DESTINATION
 
 
 class MappingLoader:
-    def __init__(self, configs:ConfigParser, odoo_src: OdooConnection, odoo_dst: OdooConnection, mapping_dir: str):
+    def __init__(self, configs:ConfigParser, odoo_provider: OdooConnectionProvider, mapping_dir: str):
         self.configs = configs
-        self.odoo_src = odoo_src
-        self.odoo_dst = odoo_dst
+        self.odoo_src = odoo_provider.get_odoo_connection(SOURCE)
+        self.odoo_dst = odoo_provider.get_odoo_connection(DESTINATION)
         self.mapping_dir = mapping_dir
         self.cache = {}
 
@@ -46,18 +46,17 @@ class MappingLoader:
 
 class MappingProvider:
 
-    def __init__(self, configs: ConfigParser, odoo_src: OdooConnection, odoo_dst: OdooConnection, mapping_dir: str):
+    def __init__(self, configs: ConfigParser, odoo_provider: OdooConnectionProvider, mapping_dir: str):
         """
         Initialize the MappingProvider to handle caching and file-based mappings.
         Ensure it only runs once.
         """
         if not hasattr(self, 'initialized'):  # Ensure initialization runs only once
-            self.configs = configs
-            self.odoo_src = odoo_src
-            self.odoo_dst = odoo_dst
-            self.mapping_dir = mapping_dir
-            self.cache = {}  # In-memory cache for model mappings
-            os.makedirs(self.mapping_dir, exist_ok=True)
+            self._configs = configs
+            self._odoo_provider = odoo_provider
+            self._mapping_dir = mapping_dir
+            self._cache = {}  # In-memory cache for model mappings
+            os.makedirs(self._mapping_dir, exist_ok=True)
             self.initialized = True  # Mark as initialized
 
     def load_mappings_from_files(self, model_name: str):
@@ -77,8 +76,11 @@ class MappingProvider:
                     self.cache[model_name][int(source_id.strip())] = int(dest_id.strip())
 
     def load_mappings_from_database(self, model_name: str, field_name: str):
-        mapping_loader = MappingLoader(configs=self.configs, odoo_src=self.odoo_src, odoo_dst=self.odoo_dst,
-                                       mapping_dir=self.mapping_dir)
+        mapping_loader = MappingLoader(
+            configs=self._configs,
+            odoo_provider=self._odoo_provider,
+            mapping_dir=self._mapping_dir
+        )
         if field_name.lower() == "name":
             mapping_loader.load_mapping_by_name_from_database(model_name)
         else:

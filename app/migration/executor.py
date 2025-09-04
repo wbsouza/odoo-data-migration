@@ -15,15 +15,15 @@ from .handlers.product_attribute_line import ProductAttributeLineHandler
 from .handlers.account_move import AccountMoveHandler
 from .handlers.account_payment import AccountPaymentHandler
 from .core.mapping import MappingProvider
-from .core.odoo import OdooConnection
-
+from .core.odoo_connection import OdooConnection, OdooConnectionProvider, SOURCE, DESTINATION
+from .core.db_connection import DBConnectionProvider
+from .core.db_changes import create_tracking_fields
 
 _logger = logging.getLogger(__name__)
 
-
 class Migration:
 
-    def __init__(self, configs: ConfigParser, src_odoo: OdooConnection, dst_odoo: OdooConnection, mappings_dir: str):
+    def __init__(self, configs: ConfigParser, mappings_dir: str):
         """
         Initialize the Migration class with the source and destination Odoo connections.
         :param configs: Application configs.
@@ -31,37 +31,38 @@ class Migration:
         :param dst_odoo: OdooConnection instance for the destination Odoo system.
         :param mappings_dir: Mappings directory.
         """
-        self.configgs = configs
-        self.src_odoo = src_odoo
-        self.dst_odoo = dst_odoo
-        self.mappings_provider = MappingProvider(configs, src_odoo, dst_odoo, mappings_dir)
-        self.mappings_provider.load_mappings_from_database("res.groups", "name")
+        self._configs = configs
+        self._odoo_provider = OdooConnectionProvider(configs)
+        self._db_provider = DBConnectionProvider(configs)
+        self._mappings_provider = MappingProvider(configs, self._odoo_provider, mappings_dir)
+        self._mappings_provider.load_mappings_from_database("res.groups", "name")
+        create_tracking_fields(self._configs)
 
         self.models_to_migrate = [
-            'res.users',
+            # 'res.users',
             'res.partner',
-            'product.category',
-            'product.template',
-            'product.attribute',
-            'product.attribute.value',
-            'product.attribute.line',
+            # 'product.category',
+            # 'product.template',
+            # 'product.attribute',
+            # 'product.attribute.value',
+            # 'product.attribute.line',
             # 'product.template.attribute.value',
             # 'product.product',
             # 'account.move',
             # 'account.payment',
         ]
         self.models_handlers = {
-            'res.users': ResUsersHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'res.partner': ResPartnerHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'product.category': ProductCategoryHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'product.template': ProductTemplateHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'product.attribute': ProductAttributeHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'product.attribute.value': ProductAttributeValueHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            'product.attribute.line': ProductAttributeLineHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            # 'product.template.attribute.value': ProductTemplateAttributeValueHandler(self.src_odoo, self.dst_odoo,self.mappings_provider),
-            # 'product.product': ProductProductHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            # 'account.move': AccountMoveHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
-            # 'account.payment': AccountPaymentHandler(self.src_odoo, self.dst_odoo, self.mappings_provider),
+            # 'res.users': ResUsersHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
+            # 'product.category': ProductCategoryHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            # 'product.template': ProductTemplateHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            # 'product.attribute': ProductAttributeHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            # 'product.attribute.value': ProductAttributeValueHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            # 'product.attribute.line': ProductAttributeLineHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            # 'product.template.attribute.value': ProductTemplateAttributeValueHandler(self._src_odoo, self._dst_odoo,self.mappings_provider),
+            # 'product.product': ProductProductHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            # 'account.move': AccountMoveHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            # 'account.payment': AccountPaymentHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
         }
 
 
@@ -81,7 +82,8 @@ class Migration:
             offset = 0
             batch_size = 100
             while not eof:
-                records = handler.fetch_items(handler.src_odoo, model_name, offset=offset,limit=batch_size, order="id")
+                src_odoo = self._odoo_provider.get_odoo_connection(SOURCE)
+                records = handler.fetch_items(src_odoo, model_name, offset=offset,limit=batch_size, order="id")
                 eof = records is not None and len(records) < 1
                 if not eof:
                     _logger.info(f"Fetched {len(records)} records for {model_name}. Applying transformations...")
