@@ -39,7 +39,7 @@ class Migration:
         create_tracking_fields(self._configs)
 
         self.models_to_migrate = [
-            # 'res.users',
+            'res.users',
             'res.partner',
             # 'product.category',
             # 'product.template',
@@ -52,7 +52,7 @@ class Migration:
             # 'account.payment',
         ]
         self.models_handlers = {
-            # 'res.users': ResUsersHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'res.user'),
             'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
             # 'product.category': ProductCategoryHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
             # 'product.template': ProductTemplateHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),

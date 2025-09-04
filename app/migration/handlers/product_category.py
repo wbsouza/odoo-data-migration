@@ -34,14 +34,14 @@ class ProductCategoryHandler(DomainHandler):
         if src_group is not None:
             domain = [('name', '=', src_group
             ['name'])]
-            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            resp = self._odoo_provider.get_odoo_connection(DESTINATION).fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
 
     def find_category_by_name(self, name) -> bool:
         domain = [('name', '=', name)]
-        model = self._dst_odoo.session.env[self.model_name]
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[self.src_model_name]
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -49,7 +49,7 @@ class ProductCategoryHandler(DomainHandler):
 
     def find_dst_parent_by_old_name(self, name):
         domain = [('name', '=', name)]
-        model = self._dst_odoo.session.env[self.model_name]
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[self.src_model_name]
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -114,7 +114,7 @@ class ProductCategoryHandler(DomainHandler):
             src_record = transformed_record['src_record']
 
             if action == 'create':
-                dst_model = self._dst_odoo.session.env[model_name]
+                dst_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[model_name]
                 logging.info(f"Creating category \"{src_record.name}\" ...")
                 new_id = dst_model.create(data)
                 src_record.write({'x_new_id': new_id})

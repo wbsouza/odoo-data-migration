@@ -3,24 +3,23 @@ from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
 
 from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
-from ..core.odoo_connection import OdooConnection
+from ..core.odoo_connection import OdooConnection, OdooConnectionProvider, SOURCE, DESTINATION
+from ..core.db_connection import DBConnectionProvider
 
 import json
 
 
 class ResUsersHandler(DomainHandler):
 
-    def __init__(self, src_odoo: OdooConnection, dst_odoo: OdooConnection, mapping_provider: MappingProvider):
-        """
-        Initialize the ResGroupsHandler with the source and destination Odoo connections, and the MappingProvider.
-        :param src_odoo: OdooConnection instance for the source Odoo.
-        :param dst_odoo: OdooConnection instance for the destination Odoo.
-        :param mapping_provider: An instance of MappingProvider to handle ID mappings.
-        """
-        super().__init__(src_odoo, dst_odoo, 'res.users')
-        self.language = dst_odoo.language
-        self.company_id = dst_odoo.company_id
-        self.mapping_provider = mapping_provider
+    def __init__(
+            self,
+            odoo_provider: OdooConnectionProvider,
+            db_provider: DBConnectionProvider,
+            mapping_provider: MappingProvider,
+            model_name: str
+    ):
+        super().__init__(odoo_provider, db_provider, 'res.users')
+        self._mapping_provider = mapping_provider
 
     def find_dest_group_id(self, src_group: Any) -> Optional[int]:
         """
@@ -33,10 +32,11 @@ class ResUsersHandler(DomainHandler):
             return None
 
         # try to find the source id in the cache first ...
-        result = self.mapping_provider.get_mapping('res.groups', src_group.id)
+        result = self._mapping_provider.get_mapping('res.groups', src_group.id)
         if not result:
             domain = [('name', '=', src_group['name'])]
-            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            odoo_dst = self._odoo_provider.get_odoo_connection(DESTINATION)
+            resp = odoo_dst.fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 result = resp[0]
                 # update the cache with the respective id
@@ -45,7 +45,8 @@ class ResUsersHandler(DomainHandler):
 
     def find_product_attribute_by_login(self, login) -> bool:
         domain = [('login', '=', login)]
-        model = self._dst_odoo.session.env[self.model_name]
+        odoo_dst = self._odoo_provider.get_odoo_connection(DESTINATION)
+        model = odoo_dst.session.env[self.src_model_name]
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -85,13 +86,20 @@ class ResUsersHandler(DomainHandler):
             action = transformed_record['action']
             src_record = transformed_record['src_record']
 
-            if action == 'create':
-                dst_model = self._dst_odoo.session.env[model_name]
-                logging.info(f"Creating user \"{src_record.name}\" ...")
-                new_id = dst_model.create(data)
-                src_record.write({'x_new_id': new_id})
-            elif action == 'update':
-                logging.info(f"Updating user \"{src_record.name}\" ...")
-                dst_record = transformed_record['dst_record']
-                dst_record.write(data)
-                src_record.write({'x_new_id': dst_record.id})
+            if action in ['create', 'update']:
+
+                if action == 'create':
+                    dst_model = self.get_dst_model()
+                    logging.info(f"Creating {self.get_dst_model()} \"{src_record.name}\" ...")
+                    new_id = dst_model.create(data)
+
+                elif action == 'update':
+                    logging.info(f"Updating partner \"{src_record.name}\" ...")
+                    dst_record = transformed_record['dst_record']
+                    dst_record.write(data)
+                    new_id = dst_record.id
+
+                self.update_tracking_ids(
+                    new_id=new_id,
+                    src_record=src_record
+                )

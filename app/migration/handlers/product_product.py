@@ -34,21 +34,21 @@ class ProductProductHandler(DomainHandler):
         if src_group is not None:
             domain = [('name', '=', src_group
             ['name'])]
-            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            resp = self._odoo_provider.get_odoo_connection(DESTINATION).fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
 
     def find_dst_product_tmpl(self, src_record):
         domain = [('name', '=', src_record.product_tmpl_id.name)]
-        model = self._dst_odoo.session.env['product.template']
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['product.template']
         attribute_id = model.search(domain)
         attribute = model.browse(attribute_id[0])
         return attribute
 
     def product_exists(self, product_tmpl_id: int, default_code: str, combination_indices: str) -> bool:
         domain = ['&', ('product_tmpl_id', '=', product_tmpl_id), ('default_code', '=', default_code), ('combination_indices', '=', combination_indices)]
-        model = self._dst_odoo.session.env[self.model_name]
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[self.src_model_name]
         ids = model.search(domain, limit=1)
         return ids is not None and len(ids) > 0
 
@@ -62,7 +62,7 @@ class ProductProductHandler(DomainHandler):
                 'default_code': record.default_code,
                 'x_old_id': record.id,
             }
-            transformed_records.append({ 'action': 'update', 'model': self.model_name, 'data': product_dst_data})
+            transformed_records.append({ 'action': 'update', 'model': self.src_model_name, 'data': product_dst_data})
 
         else:
 
@@ -82,7 +82,7 @@ class ProductProductHandler(DomainHandler):
                 # 'groups_id': [(6, 0, dst_group_ids)],
                 'x_old_id': record.id
             }
-            transformed_records.append({'action': 'create', 'model': self.model_name, 'data': product_dst_data})
+            transformed_records.append({'action': 'create', 'model': self.src_model_name, 'data': product_dst_data})
 
         return transformed_records
 
@@ -96,10 +96,10 @@ class ProductProductHandler(DomainHandler):
             data = record['data']
             action = record['action']
 
-            src_model = self._src_odoo.session.env[self.model_name]
+            src_model = self._odoo_provider.get_odoo_connection(SOURCE).session.env[self.src_model_name]
             src_record = src_model.browse(data['x_old_id'])
 
-            dst_model = self._dst_odoo.session.env[model_name]
+            dst_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[model_name]
 
             if action == 'create':
                 logging.info(f"Creating product \"{src_record.default_code}\" ...")

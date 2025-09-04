@@ -31,14 +31,14 @@ class AccountMoveHandler(DomainHandler):
         if src_group is not None:
             domain = [('name', '=', src_group
             ['name'])]
-            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            resp = self._odoo_provider.get_odoo_connection(DESTINATION).fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
 
     def find_account_move_by_name(self, name):
         domain = [('name', '=', name)]
-        model = self._dst_odoo.session.env['account.move']
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['account.move']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -46,7 +46,7 @@ class AccountMoveHandler(DomainHandler):
 
     def find_partner_by_name(self, name) -> bool:
         domain = [('name', '=', name)]
-        model = self._dst_odoo.session.env['res.partner']
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['res.partner']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -88,7 +88,7 @@ class AccountMoveHandler(DomainHandler):
 
     def find_dst_product_by_default_code(self, product_tmpl_id: int, default_code: str) -> bool:
         domain = ['&', ('product_tmpl_id', '=', product_tmpl_id), ('default_code', '=', default_code)]
-        model = self._dst_odoo.session.env['product.product']
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['product.product']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -153,8 +153,8 @@ class AccountMoveHandler(DomainHandler):
         Save the transformed records in the destination system.
         This handles creating account.move in the destination Odoo (Odoo 16).
         """
-        dst_model = self._dst_odoo.session.env['account.move']
-        dst_line_model = self._dst_odoo.session.env['account.move.line']
+        dst_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['account.move']
+        dst_line_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['account.move.line']
 
         for transformed_record in transformed_records:
 

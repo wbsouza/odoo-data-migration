@@ -36,7 +36,7 @@ class ProductAttributeHandler(DomainHandler):
         result = self.mapping_provider.get_mapping('res.groups', src_group.id)
         if not result:
             domain = [('name', '=', src_group['name'])]
-            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            resp = self._odoo_provider.get_odoo_connection(DESTINATION).fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 result = resp[0]
                 # update the cache with the respective id
@@ -45,14 +45,14 @@ class ProductAttributeHandler(DomainHandler):
 
     def find_dst_attribute(self, record):
         domain = [('name', '=', record.attribute_id.name)]
-        model = self._dst_odoo.session.env['product.attribute']
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['product.attribute']
         attribute_id = model.search(domain)
         attribute = model.browse(attribute_id[0])
         return attribute
 
     def find_product_attribute_by_name(self, name: str) -> bool:
         domain = [('name', '=', name)]
-        model = self._dst_odoo.session.env[self.model_name]
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[self.src_model_name]
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -92,7 +92,7 @@ class ProductAttributeHandler(DomainHandler):
             src_record = transformed_record['src_record']
 
             if action == 'create':
-                dst_model = self._dst_odoo.session.env[model_name]
+                dst_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[model_name]
                 logging.info(f"Creating attribute \"{src_record.name}\" ...")
                 new_id = dst_model.create(data)
                 self.update_tracking_ids('product.attribute', new_id, src_record)

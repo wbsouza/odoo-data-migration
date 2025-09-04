@@ -12,6 +12,14 @@ import json
 
 class ResPartnerHandler(DomainHandler):
 
+    def __init__(
+            self,
+            odoo_provider: OdooConnectionProvider,
+            db_provider: DBConnectionProvider,
+            model_name: str
+    ):
+        super().__init__(odoo_provider, db_provider, 'res.partner')
+
     def find_dest_group_id(self, src_group: Any) -> Optional[int]:
         """
         Find the matching category ID in the destination Odoo (Odoo 16) based on the source category ID from Odoo 11.
@@ -22,13 +30,11 @@ class ResPartnerHandler(DomainHandler):
 
         if src_group is not None:
             domain = [('name', '=', src_group['name'])]
-            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            odoo_dst = self._odoo_provider.get_odoo_connection(DESTINATION)
+            resp = odoo_dst.fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
-
-    def __init__(self, odoo_provider: OdooConnectionProvider, db_provider: DBConnectionProvider, model_name: str):
-        super().__init__(odoo_provider, db_provider, 'res.partner')
 
     def find_dest_partner_by_name(self, name) -> bool:
         domain = [('name', '=', name)]

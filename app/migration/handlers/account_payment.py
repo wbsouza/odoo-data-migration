@@ -31,14 +31,14 @@ class AccountPaymentHandler(DomainHandler):
         if src_group is not None:
             domain = [('name', '=', src_group
             ['name'])]
-            resp = self._dst_odoo.fetch_ids('res.groups', domain=domain, limit=1)
+            resp = self._odoo_provider.get_odoo_connection(DESTINATION).fetch_ids('res.groups', domain=domain, limit=1)
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
 
     def find_account_payment(self, id):
         domain = [('move_id', '=', id)]
-        model = self._dst_odoo.session.env['account.payment']
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['account.payment']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -46,7 +46,7 @@ class AccountPaymentHandler(DomainHandler):
 
     def find_partner_by_name(self, name) -> bool:
         domain = [('name', '=', name)]
-        model = self._dst_odoo.session.env['res.partner']
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['res.partner']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -55,7 +55,7 @@ class AccountPaymentHandler(DomainHandler):
 
     def find_move_by_name(self, name) -> bool:
         domain = [('name', '=', name)]
-        model = self._dst_odoo.session.env['account.move']
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['account.move']
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -109,7 +109,7 @@ class AccountPaymentHandler(DomainHandler):
             src_record = transformed_record['src_record']
             move = self.find_move_by_name(src_record.move_name)
             if action == 'create':
-                dst_model = self._dst_odoo.session.env['account.payment']
+                dst_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['account.payment']
                 logging.info(f"Creating payment for move \"{move.name}\" ...")
                 new_id = dst_model.create(data)
                 src_record.write({'x_new_id': new_id})

@@ -31,8 +31,6 @@ class DomainHandler:
     def __init__(self, odoo_provider: OdooConnectionProvider, db_provider: DBConnectionProvider, model_name: str):
         self._odoo_provider = odoo_provider
         self._db_provider = db_provider
-        self._src_odoo = odoo_provider.get_odoo_connection(SOURCE)
-        self._dst_odoo = odoo_provider.get_odoo_connection(DESTINATION)
         self.src_model_name = model_name
 
     def get_src_model(self) -> Any:
