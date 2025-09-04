@@ -86,7 +86,7 @@ class AccountPaymentHandler(DomainHandler):
                 'payment_token_id': src_record.payment_token_id.id,
                 'payment_transaction_id': src_record.payment_transaction_id.id,
                 'payment_type': src_record.payment_type,
-                'x_old_id': src_record.id,
+                # 'x_old_id': src_record.id,  # This field will be set via update_tracking_ids method
             }
         }
 

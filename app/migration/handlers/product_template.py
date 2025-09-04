@@ -1,27 +1,24 @@
 import logging
 
-from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
+from typing import Dict, List, Optional, Any
 
-from .base import DomainHandler, ResourceNotFoundException
+from .base import DomainHandler
 from ..core.mapping import MappingProvider
-from ..core.odoo_connection import OdooConnection
-
-import json
+from ..core.odoo_connection import OdooConnectionProvider, DESTINATION
+from ..core.db_connection import DBConnectionProvider
 
 
 class ProductTemplateHandler(DomainHandler):
 
-    def __init__(self, src_odoo: OdooConnection, dst_odoo: OdooConnection, mapping_provider: MappingProvider):
-        """
-        Initialize the ResGroupsHandler with the source and destination Odoo connections, and the MappingProvider.
-        :param src_odoo: OdooConnection instance for the source Odoo.
-        :param dst_odoo: OdooConnection instance for the destination Odoo.
-        :param mapping_provider: An instance of MappingProvider to handle ID mappings.
-        """
-        super().__init__(src_odoo, dst_odoo, 'product.template')
-        self.language = dst_odoo.language
-        self.company_id = dst_odoo.company_id
-        self.mapping_provider = mapping_provider
+    def __init__(
+            self,
+            odoo_provider: OdooConnectionProvider,
+            db_provider: DBConnectionProvider,
+            mapping_provider: MappingProvider,
+            model_name: str
+    ):
+        super().__init__(odoo_provider, db_provider, 'product.template')
+        self._mapping_provider = mapping_provider
 
     def find_dest_group_id(self, src_group: Any) -> Optional[int]:
         """
@@ -41,7 +38,8 @@ class ProductTemplateHandler(DomainHandler):
 
     def find_template_by_name(self, name) -> bool:
         domain = [('name', '=', name)]
-        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[self.src_model_name]
+        odoo_dst = self._odoo_provider.get_odoo_connection(DESTINATION)
+        model = odoo_dst.session.env[self.src_model_name]
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -78,14 +76,20 @@ class ProductTemplateHandler(DomainHandler):
             action = transformed_record['action']
             src_record = transformed_record['src_record']
 
-            if action == 'create':
-                dst_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[model_name]
-                logging.info(f"Creating template \"{src_record.name}\" ...")
-                new_id = dst_model.create(data)
-                self.update_tracking_ids('product.template', new_id, src_record)
+            if action in ['create', 'update']:
 
-            elif action == 'update':
-                logging.info(f"Updating template \"{src_record.name}\" ...")
-                dst_record = transformed_record['dst_record']
-                dst_record.write(data)
-                self.update_tracking_ids('product.template', dst_record.id, src_record)
+                if action == 'create':
+                    dst_model = self.get_dst_model()
+                    logging.info(f"Creating {self.get_dst_model_name()} \"{src_record.name}\" ...")
+                    new_id = dst_model.create(data)
+
+                elif action == 'update':
+                    logging.info(f"Updating template \"{src_record.name}\" ...")
+                    dst_record = transformed_record['dst_record']
+                    dst_record.write(data)
+                    new_id = dst_record.id
+
+                self.update_tracking_ids(
+                    new_id=new_id,
+                    src_record=src_record
+                )

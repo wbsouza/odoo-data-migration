@@ -95,7 +95,7 @@ class ProductTemplateAttributeValueHandler(DomainHandler):
             'attribute_line_id': dst_attribute.id,
             'product_tmpl_id': dst_attribute.id,
             'attribute_id': dst_attribute.id ,
-            'x_old_id': src_record.id,
+            # 'x_old_id': src_record.id,  # This field will be set via update_tracking_ids method
             }
         }
 

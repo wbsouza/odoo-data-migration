@@ -60,7 +60,7 @@ class ProductProductHandler(DomainHandler):
                 'product_tmpl_id': dst_product_tmpl.id,
                 'combination_indices': record.combination_indices,
                 'default_code': record.default_code,
-                'x_old_id': record.id,
+                # 'x_old_id': record.id,  # This field will be set via update_tracking_ids method
             }
             transformed_records.append({ 'action': 'update', 'model': self.src_model_name, 'data': product_dst_data})
 
@@ -80,7 +80,7 @@ class ProductProductHandler(DomainHandler):
                 'product_tmpl_id': dst_product_tmpl.id,
                 'default_code': record.default_code,
                 # 'groups_id': [(6, 0, dst_group_ids)],
-                'x_old_id': record.id
+                # 'x_old_id': record.id  # This field will be set via update_tracking_ids method
             }
             transformed_records.append({'action': 'create', 'model': self.src_model_name, 'data': product_dst_data})
 

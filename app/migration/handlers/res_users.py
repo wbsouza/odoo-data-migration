@@ -1,9 +1,9 @@
 import logging
-from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
+from typing import Dict, List, Optional, Any
 
-from .base import DomainHandler, ResourceNotFoundException
+from .base import DomainHandler
 from ..core.mapping import MappingProvider
-from ..core.odoo_connection import OdooConnection, OdooConnectionProvider, SOURCE, DESTINATION
+from ..core.odoo_connection import OdooConnectionProvider, DESTINATION
 from ..core.db_connection import DBConnectionProvider
 
 import json

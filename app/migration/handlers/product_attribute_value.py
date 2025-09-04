@@ -75,7 +75,7 @@ class ProductAttributeValueHandler(DomainHandler):
             'data': {
             'name': src_record.name,
             'attribute_id': dst_attribute.id,
-            'x_old_id': src_record.id,
+            # 'x_old_id': src_record.id,  # This field will be set via update_tracking_ids method
             }
         }
 

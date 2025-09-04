@@ -76,7 +76,7 @@ class AccountMoveHandler(DomainHandler):
                 'date': str(src_record.date),
                 'ref': src_record.ref,
                 # 'line_ids': [(0, 0, line) for line in src_record.line_ids],
-                'x_old_id': src_record.id,
+                # 'x_old_id': src_record.id,  # This field will be set via update_tracking_ids method
             }
         }
 
