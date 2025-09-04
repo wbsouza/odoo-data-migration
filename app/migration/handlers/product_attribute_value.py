@@ -1,24 +1,29 @@
 import logging
-from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
-from .base import DomainHandler, ResourceNotFoundException
+from typing import Dict, List, Optional, Any
+from .base import DomainHandler, DESTINATION, SOURCE
 from ..core.mapping import MappingProvider
-from ..core.odoo_connection import OdooConnection
-import json
+from ..core.odoo_connection import OdooConnectionProvider
+from ..core.db_connection import DBConnectionProvider
 
 
 class ProductAttributeValueHandler(DomainHandler):
 
-    def __init__(self, src_odoo: OdooConnection, dst_odoo: OdooConnection, mapping_provider: MappingProvider):
+    def __init__(
+            self,
+            odoo_provider: OdooConnectionProvider,
+            db_provider: DBConnectionProvider,
+            mapping_provider: MappingProvider,
+            model_name: str
+    ):
         """
-        Initialize the ResGroupsHandler with the source and destination Odoo connections, and the MappingProvider.
-        :param src_odoo: OdooConnection instance for the source Odoo.
-        :param dst_odoo: OdooConnection instance for the destination Odoo.
+        Initialize the ProductAttributeValueHandler with the provider pattern.
+        :param odoo_provider: OdooConnectionProvider instance.
+        :param db_provider: DBConnectionProvider instance.
         :param mapping_provider: An instance of MappingProvider to handle ID mappings.
+        :param model_name: The model name to migrate.
         """
-        super().__init__(src_odoo, dst_odoo, 'product.attribute.value')
-        self.language = dst_odoo.language
-        self.company_id = dst_odoo.company_id
-        self.mapping_provider = mapping_provider
+        super().__init__(odoo_provider, db_provider, 'product.attribute.value')
+        self._mapping_provider = mapping_provider
 
     def find_dest_group_id(self, src_group: Any) -> Optional[int]:
         """
@@ -88,26 +93,28 @@ class ProductAttributeValueHandler(DomainHandler):
     def save_into_destination(self, transformed_records: List[Dict]):
         """
         Save the transformed records in the destination system.
-        This handles creating product.template in the destination Odoo (Odoo 16).
+        This handles creating product.attribute.value in the destination Odoo (Odoo 16).
         """
-        for record in transformed_records:
-            model_name = record['model']
-            data = record['data']
-            # secondary_data = record['secondary_data']
-            action = record['action']
-            src_model = self._odoo_provider.get_odoo_connection(SOURCE).session.env[self.src_model_name]
-            src_record = src_model.browse(data['x_old_id'])
-            dst_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[model_name]
-            # dst_template_attribute_value_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['product.template.attribute.value']
+        for transformed_record in transformed_records:
+            model_name = transformed_record['model']
+            data = transformed_record['data']
+            action = transformed_record['action']
+            src_record = transformed_record['src_record']
 
-            if action == 'create':
-                logging.info(f"Creating attribute value \"{src_record.name}\" ...")
-                product_attribute_value = dst_model.create(data)
-                # product_template_attribute_value = product_attribute_value = dst_template_attribute_value_model.create(secondary_data)
-                src_record.write({'x_new_id': product_attribute_value})
+            if action in ['create', 'update']:
 
-            elif action == 'update':
-                logging.info(f"Updating attribute value \"{src_record.name}\" ...")
-                dst_record = record['dst_record']
-                src_record.write({'x_new_id': dst_record.id})
-                dst_record.write(data)
+                if action == 'create':
+                    dst_model = self.get_dst_model()
+                    logging.info(f"Creating attribute value \"{src_record.name}\" ...")
+                    new_id = dst_model.create(data)
+
+                elif action == 'update':
+                    logging.info(f"Updating attribute value \"{src_record.name}\" ...")
+                    dst_record = transformed_record['dst_record']
+                    dst_record.write(data)
+                    new_id = dst_record.id
+
+                self.update_tracking_ids(
+                    new_id=new_id,
+                    src_record=src_record
+                )
