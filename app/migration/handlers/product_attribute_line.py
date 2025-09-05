@@ -126,6 +126,68 @@ class ProductAttributeLineHandler(DomainHandler):
         
         return dst_value_ids
 
+    def sync_variant_default_codes(self, src_record, dst_template_id):
+        """
+        After creating attribute lines, sync default_code from Odoo 11 variants 
+        to the corresponding Odoo 17 variants that were auto-generated.
+        """
+        # Get all source variants for this template
+        src_variant_ids = self._odoo_src.session.env['product.product'].search([
+            ('product_tmpl_id', '=', src_record.product_tmpl_id.id)
+        ])
+        src_variants = self._odoo_src.session.env['product.product'].browse(src_variant_ids)
+        
+        # Get all destination variants for this template
+        dst_variant_ids = self._odoo_dst.session.env['product.product'].search([
+            ('product_tmpl_id', '=', dst_template_id)
+        ])
+        dst_variants = self._odoo_dst.session.env['product.product'].browse(dst_variant_ids)
+        
+        logging.info(f"Syncing default_code for {len(src_variants)} source variants to {len(dst_variants)} destination variants")
+        
+        # Create mapping based on attribute value combinations
+        for src_variant in src_variants:
+            if not src_variant.default_code:
+                continue
+                
+            # Build attribute combination key for source variant
+            src_attr_combo = self._build_attribute_combination_key(src_variant)
+            
+            # Find matching destination variant
+            matching_dst_variant = None
+            for dst_variant in dst_variants:
+                dst_attr_combo = self._build_attribute_combination_key_v17(dst_variant)
+                if src_attr_combo == dst_attr_combo:
+                    matching_dst_variant = dst_variant
+                    break
+            
+            # Update default_code if match found
+            if matching_dst_variant:
+                if not matching_dst_variant.default_code:  # Only update if empty
+                    matching_dst_variant.write({'default_code': src_variant.default_code})
+                    logging.info(f"Updated variant {matching_dst_variant.id} default_code: {src_variant.default_code}")
+                else:
+                    logging.info(f"Skipped variant {matching_dst_variant.id} - already has default_code: {matching_dst_variant.default_code}")
+            else:
+                logging.warning(f"No matching destination variant found for source variant {src_variant.id} with combo: {src_attr_combo}")
+
+    def _build_attribute_combination_key(self, variant):
+        """Build a key representing the attribute combination for Odoo 11 variant"""
+        attr_values = []
+        for attr_value in variant.attribute_value_ids:
+            attr_values.append(f"{attr_value.attribute_id.name}:{attr_value.name}")
+        return "|".join(sorted(attr_values))
+    
+    def _build_attribute_combination_key_v17(self, variant):
+        """Build a key representing the attribute combination for Odoo 17 variant"""
+        attr_values = []
+        # In Odoo 17, variants use product_template_attribute_value_ids
+        for ptav in variant.product_template_attribute_value_ids:
+            attr_name = ptav.attribute_id.name
+            value_name = ptav.product_attribute_value_id.name
+            attr_values.append(f"{attr_name}:{value_name}")
+        return "|".join(sorted(attr_values))
+
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         dst_attribute = self.find_dst_attribute(src_record)
         # Get only the specific attribute values used in existing Odoo 11 variants
@@ -173,12 +235,20 @@ class ProductAttributeLineHandler(DomainHandler):
                 dst_model = self._odoo_dst.session.env[self.get_dst_model_name()]
 
                 if action == 'create':
-                    logging.info(f"Creating attribute value \"{src_record.product_tmpl_id.name, src_record.attribute_id.name, }\" ...")
+                    logging.info(f"Creating attribute line \"{src_record.product_tmpl_id.name, src_record.attribute_id.name}\" ...")
                     new_id = dst_model.create(data)
                     self.update_tracking_ids(new_id, src_record)
+                    
+                    # After creating attribute line, sync variant default codes
+                    dst_template_id = data['product_tmpl_id']
+                    self.sync_variant_default_codes(src_record, dst_template_id)
 
                 elif action == 'update':
-                    logging.info(f"Updating attribute value \"{src_record.product_tmpl_id.name, src_record.attribute_id.name, }\" ...")
+                    logging.info(f"Updating attribute line \"{src_record.product_tmpl_id.name, src_record.attribute_id.name}\" ...")
                     dst_record = record['dst_record']
                     dst_record.write(data)
-                    self.update_tracking_ids(dst_record.id, dst_record)
+                    self.update_tracking_ids(dst_record.id, src_record)
+                    
+                    # After updating attribute line, sync variant default codes
+                    dst_template_id = data['product_tmpl_id']
+                    self.sync_variant_default_codes(src_record, dst_template_id)
