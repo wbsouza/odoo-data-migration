@@ -4,7 +4,7 @@ from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
 from ..core.mapping import MappingProvider
 from ..core.odoo_connection import OdooConnectionProvider, SOURCE, DESTINATION
-from ..core.db_connection import DBConnectionProvider
+from ..core.database import DBConnectionProvider
 
 class ProductAttributeLineHandler(DomainHandler):
 

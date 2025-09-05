@@ -2,7 +2,7 @@ import logging
 
 from typing import List, Dict, Any
 
-from ..core.db_connection import DBConnectionProvider
+from ..core.database import DBConnectionProvider
 from ..core.odoo_connection import OdooConnection, OdooConnectionProvider
 
 _logger = logging.getLogger(__name__)

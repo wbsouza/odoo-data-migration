@@ -10,14 +10,13 @@ from .handlers.product_attribute import ProductAttributeHandler
 from .handlers.product_template import ProductTemplateHandler
 from .handlers.product_attribute_value import ProductAttributeValueHandler
 from .handlers.product_attribute_line import ProductAttributeLineHandler
-# from .handlers.product_template_attribute_value import ProductTemplateAttributeValueHandler
 from .handlers.product_product import ProductProductHandler
 from .handlers.account_move import AccountMoveHandler
 from .handlers.account_payment import AccountPaymentHandler
 from .core.mapping import MappingProvider
-from .core.odoo_connection import OdooConnection, OdooConnectionProvider, SOURCE, DESTINATION
-from .core.db_connection import DBConnectionProvider
-from .core.db_changes import create_tracking_fields
+from .core.odoo_connection import OdooConnectionProvider, SOURCE
+from .core.database import DBConnectionProvider
+from .core.database import create_tracking_fields
 
 _logger = logging.getLogger(__name__)
 
@@ -47,7 +46,6 @@ class Migration:
             'product.attribute.value',
             'product.attribute.line',
             'product.product',
-            # 'product.template.attribute.value',
             # 'account.move',
             # 'account.payment',
         ]
@@ -60,7 +58,6 @@ class Migration:
             'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, 'product.attribute.value'),
             'product.attribute.line': ProductAttributeLineHandler(self._odoo_provider, self._db_provider, 'product.attribute.line'),
             'product.product': ProductProductHandler(self._odoo_provider, self._db_provider, 'product.product'),
-            # 'product.template.attribute.value': ProductTemplateAttributeValueHandler(self._src_odoo, self._dst_odoo,self.mappings_provider),
             # 'account.move': AccountMoveHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
             # 'account.payment': AccountPaymentHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
         }

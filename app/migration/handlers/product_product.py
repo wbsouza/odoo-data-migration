@@ -3,7 +3,7 @@ from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
 from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
 from ..core.odoo_connection import OdooConnectionProvider, SOURCE, DESTINATION
-from ..core.db_connection import DBConnectionProvider
+from ..core.database import DBConnectionProvider, fetch_sql
 
 class ProductProductHandler(DomainHandler):
 
@@ -23,53 +23,41 @@ class ProductProductHandler(DomainHandler):
         self._odoo_src = odoo_provider.get_odoo_connection(SOURCE)
         self._odoo_dst = odoo_provider.get_odoo_connection(DESTINATION)
 
-    def find_dst_product_tmpl(self, src_record):
-        """Find the corresponding product template in destination"""
-        domain = [('name', '=', src_record.product_tmpl_id.name)]
-        model = self._odoo_dst.session.env['product.template']
-        template_ids = model.search(domain)
-        if not template_ids:
+    def find_dst_product(self, src_record):
+        conn = self._db_provider.get_connection(DESTINATION)
+        sql = f"SELECT id FROM product_template WHERE x_old_id = {src_record.product_tmpl_id.id} LIMIT 1"
+        rows = fetch_sql(conn, sql)
+        if not rows:
             raise ValueError(f"Product template '{src_record.product_tmpl_id.name}' not found in destination")
-        return model.browse(template_ids[0])
 
-    def find_dst_product_by_template_and_code(self, template_id, default_code):
-        """Check if product already exists in destination"""
-        domain = [('product_tmpl_id', '=', template_id), ('default_code', '=', default_code)]
+        # get the new product template id generated from the source product template
+        dst_product_tmpl_id = rows[0]['id']
+
+        domain = [('product_tmpl_id', '=', dst_product_tmpl_id)]
+        if src_record.default_code is not None and src_record.default_code and src_record.default_code != '':
+            domain.append(('default_code', '=', src_record.default_code))
+
         model = self._odoo_dst.session.env['product.product']
         product_ids = model.search(domain, limit=1)
         if product_ids:
             return model.browse(product_ids[0])
         return None
 
-    def apply_transformations(self, src_record: Any) -> List[Dict]:
-        """Transform source record for destination, focusing only on CREATE operations"""
-        dst_product_tmpl = self.find_dst_product_tmpl(src_record)
-        
-        # Check if product already exists in destination
-        existing_product = self.find_dst_product_by_template_and_code(
-            dst_product_tmpl.id, 
-            src_record.default_code
-        )
-        
-        transformed_record = {
-            'action': 'update' if existing_product else 'create',
-            'dst_model': 'product.product',
-            'src_record': src_record,
-            'dst_record': existing_product,
-            'data': {
-                'product_tmpl_id': dst_product_tmpl.id,
-                'default_code': src_record.default_code,
-                'x_old_id': src_record.id,  # This field will be set via update_tracking_ids method
-            }
-        }
-        
-        # Set action based on whether record already exists
-        if existing_product:
-            transformed_record['action'] = 'update'
-        else:
-            transformed_record['action'] = 'create'
 
-        return [transformed_record]
+    def apply_transformations(self, src_record: Any) -> List[Dict]:
+        result = []
+        existing_product = self.find_dst_product(src_record)
+        if existing_product:
+            result = [{
+                'action': 'update' if existing_product else 'create',
+                'dst_model': 'product.product',
+                'src_record': src_record,
+                'dst_record': existing_product,
+                'data': {
+                    'default_code': src_record.default_code,
+                }
+            }]
+        return result
 
     def save_into_destination(self, transformed_records: List[Dict]):
         """
@@ -79,20 +67,9 @@ class ProductProductHandler(DomainHandler):
         for record in transformed_records:
             data = record['data']
             action = record['action']
-            src_model = self._odoo_src.session.env[self.src_model_name]
-
-            if 'x_old_id' in data:
-                old_id = data.pop('x_old_id')
-                src_record = src_model.browse(old_id)
-                dst_model = self._odoo_dst.session.env[record['dst_model']]
-
-                if action == 'create':
-                    logging.info(f"Creating product \"{src_record.default_code or 'No Code'}\" ...")
-                    new_id = dst_model.create(data)
-                    self.update_tracking_ids(new_id, src_record)
-
-                elif action == 'update':
-                    logging.info(f"Updating product \"{src_record.default_code or 'No Code'}\" ...")
-                    dst_record = record['dst_record']
+            if 'src_record' in data:
+                if action == 'update':
+                    src_record = data['src_record']
+                    dst_record = data['dst_record']
                     dst_record.write(data)
                     self.update_tracking_ids(dst_record.id, src_record)

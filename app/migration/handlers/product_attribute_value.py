@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Any
 from .base import DomainHandler, DESTINATION, SOURCE
 from ..core.mapping import MappingProvider
 from ..core.odoo_connection import OdooConnectionProvider
-from ..core.db_connection import DBConnectionProvider
+from ..core.database import DBConnectionProvider
 
 
 class ProductAttributeValueHandler(DomainHandler):

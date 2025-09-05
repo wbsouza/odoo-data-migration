@@ -137,8 +137,8 @@ venv/
 __pycache__/
 
 # CSV database exports and symbolic links
-csv-db-11/
-csv-db-17/
+csv-db-11
+csv-db-17
 csv-db/
 
 # Diff files for database analysis

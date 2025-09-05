@@ -1,11 +1,6 @@
 import configparser
 import os
 import logging
-
-from migration.core.db_changes import create_tracking_fields
-
-
-from migration.core.odoo_connection import OdooConnection
 from migration.executor import Migration
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))

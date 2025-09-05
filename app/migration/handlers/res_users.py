@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any
 from .base import DomainHandler
 from ..core.mapping import MappingProvider
 from ..core.odoo_connection import OdooConnectionProvider, DESTINATION
-from ..core.db_connection import DBConnectionProvider
+from ..core.database import DBConnectionProvider
 
 import json
 
