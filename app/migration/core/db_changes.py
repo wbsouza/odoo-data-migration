@@ -18,14 +18,14 @@ def create_tracking_fields(config: ConfigParser):
     # Tables to add fields to
     src_tables = [
         'res_partner',
-        # 'res_users',
-        # 'res_partner',
-        # 'product_category',
-        # 'product_attribute',
-        # 'product_attribute_value',
-        # 'product_attribute_line',
-        # 'product_template',
-        # 'product_product'
+        'res_users',
+        'res_partner',
+        'product_category',
+        'product_attribute',
+        'product_attribute_value',
+        'product_attribute_line',
+        'product_template',
+        'product_product'
     ]
 
     # Create x_new_id in Odoo 11 (source)
@@ -50,15 +50,15 @@ def create_tracking_fields(config: ConfigParser):
     dst_tables = [
         'res_partner',
 
-        # 'res_users',
-        # 'res_partner',
-        # 'product_category',
-        # 'product_attribute',
-        # 'product_attribute_value',
+        'res_users',
+        'res_partner',
+        'product_category',
+        'product_attribute',
+        'product_attribute_value',
         # 'product_template_attribute_value',
-        # 'product_template_attribute_line',
-        # 'product_template',
-        # 'product_product',
+        'product_template_attribute_line',
+        'product_template',
+        'product_product',
 
     ]
     

@@ -1,122 +1,98 @@
 import logging
-
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
-
 from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
-from ..core.odoo_connection import OdooConnection
-
-import json
-
+from ..core.odoo_connection import OdooConnectionProvider, SOURCE, DESTINATION
+from ..core.db_connection import DBConnectionProvider
 
 class ProductProductHandler(DomainHandler):
 
-    def __init__(self, src_odoo: OdooConnection, dst_odoo: OdooConnection, mapping_provider: MappingProvider):
+    def __init__(
+            self,
+            odoo_provider: OdooConnectionProvider,
+            db_provider: DBConnectionProvider,
+            model_name: str
+    ):
         """
-        Initialize the ResGroupsHandler with the source and destination Odoo connections, and the MappingProvider.
-        :param src_odoo: OdooConnection instance for the source Odoo.
-        :param dst_odoo: OdooConnection instance for the destination Odoo.
-        :param mapping_provider: An instance of MappingProvider to handle ID mappings.
+        Initialize the ProductProductHandler with the provider pattern.
+        :param odoo_provider: OdooConnectionProvider instance.
+        :param db_provider: DBConnectionProvider instance.
+        :param model_name: The model name to migrate.
         """
-        super().__init__(src_odoo, dst_odoo, 'product.product')
-        self.language = dst_odoo.language
-        self.company_id = dst_odoo.company_id
-        self.mapping_provider = mapping_provider
-
-    def find_dest_group_id(self, src_group: Any) -> Optional[int]:
-        """
-        Find the matching category ID in the destination Odoo (Odoo 16) based on the source category ID from Odoo 11.
-        First check the mappings cache, and if not found, perform a lookup.
-        :param src_group: The source category
-        :return: The destination category ID.
-        """
-
-        if src_group is not None:
-            domain = [('name', '=', src_group
-            ['name'])]
-            resp = self._odoo_provider.get_odoo_connection(DESTINATION).fetch_ids('res.groups', domain=domain, limit=1)
-            if resp is not None and len(resp) > 0:
-                return resp[0]
-        return None
+        super().__init__(odoo_provider, db_provider, model_name)
+        self._odoo_src = odoo_provider.get_odoo_connection(SOURCE)
+        self._odoo_dst = odoo_provider.get_odoo_connection(DESTINATION)
 
     def find_dst_product_tmpl(self, src_record):
+        """Find the corresponding product template in destination"""
         domain = [('name', '=', src_record.product_tmpl_id.name)]
-        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['product.template']
-        attribute_id = model.search(domain)
-        attribute = model.browse(attribute_id[0])
-        return attribute
+        model = self._odoo_dst.session.env['product.template']
+        template_ids = model.search(domain)
+        if not template_ids:
+            raise ValueError(f"Product template '{src_record.product_tmpl_id.name}' not found in destination")
+        return model.browse(template_ids[0])
 
-    def product_exists(self, product_tmpl_id: int, default_code: str, combination_indices: str) -> bool:
-        domain = ['&', ('product_tmpl_id', '=', product_tmpl_id), ('default_code', '=', default_code), ('combination_indices', '=', combination_indices)]
-        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[self.src_model_name]
-        ids = model.search(domain, limit=1)
-        return ids is not None and len(ids) > 0
+    def find_dst_product_by_template_and_code(self, template_id, default_code):
+        """Check if product already exists in destination"""
+        domain = [('product_tmpl_id', '=', template_id), ('default_code', '=', default_code)]
+        model = self._odoo_dst.session.env['product.product']
+        product_ids = model.search(domain, limit=1)
+        if product_ids:
+            return model.browse(product_ids[0])
+        return None
 
-    def apply_transformations(self, record: Any) -> List[Dict]:
-        dst_product_tmpl = self.find_dst_product_tmpl(record)
-        transformed_records = []
-        if self.product_exists(record.product_tmpl_id.id, record.default_code, record.combination_indices):
-            product_dst_data = {
+    def apply_transformations(self, src_record: Any) -> List[Dict]:
+        """Transform source record for destination, focusing only on CREATE operations"""
+        dst_product_tmpl = self.find_dst_product_tmpl(src_record)
+        
+        # Check if product already exists in destination
+        existing_product = self.find_dst_product_by_template_and_code(
+            dst_product_tmpl.id, 
+            src_record.default_code
+        )
+        
+        transformed_record = {
+            'action': 'update' if existing_product else 'create',
+            'dst_model': 'product.product',
+            'src_record': src_record,
+            'dst_record': existing_product,
+            'data': {
                 'product_tmpl_id': dst_product_tmpl.id,
-                'combination_indices': record.combination_indices,
-                'default_code': record.default_code,
-                # 'x_old_id': record.id,  # This field will be set via update_tracking_ids method
+                'default_code': src_record.default_code,
+                'x_old_id': src_record.id,  # This field will be set via update_tracking_ids method
             }
-            transformed_records.append({ 'action': 'update', 'model': self.src_model_name, 'data': product_dst_data})
-
+        }
+        
+        # Set action based on whether record already exists
+        if existing_product:
+            transformed_record['action'] = 'update'
         else:
+            transformed_record['action'] = 'create'
 
-            # dst_group_ids = []
-            # for src_group in record.groups_id:
-            #     dst_group_id = self.find_dest_group_id(src_group)
-            #     if dst_group_id is not None:
-            #         dst_group_ids.append(dst_group_id)
-
-            # data = record.read()[0]
-            # sdata = json.dumps(data)
-            # print(sdata)
-
-            product_dst_data = {
-                'product_tmpl_id': dst_product_tmpl.id,
-                'default_code': record.default_code,
-                # 'groups_id': [(6, 0, dst_group_ids)],
-                # 'x_old_id': record.id  # This field will be set via update_tracking_ids method
-            }
-            transformed_records.append({'action': 'create', 'model': self.src_model_name, 'data': product_dst_data})
-
-        return transformed_records
+        return [transformed_record]
 
     def save_into_destination(self, transformed_records: List[Dict]):
         """
         Save the transformed records in the destination system.
-        This handles creating product.product in the destination Odoo (Odoo 16).
+        This handles creating/updating product.product in the destination Odoo 17.
         """
         for record in transformed_records:
-            model_name = record['model']
             data = record['data']
             action = record['action']
+            src_model = self._odoo_src.session.env[self.src_model_name]
 
-            src_model = self._odoo_provider.get_odoo_connection(SOURCE).session.env[self.src_model_name]
-            src_record = src_model.browse(data['x_old_id'])
+            if 'x_old_id' in data:
+                old_id = data.pop('x_old_id')
+                src_record = src_model.browse(old_id)
+                dst_model = self._odoo_dst.session.env[record['dst_model']]
 
-            dst_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[model_name]
+                if action == 'create':
+                    logging.info(f"Creating product \"{src_record.default_code or 'No Code'}\" ...")
+                    new_id = dst_model.create(data)
+                    self.update_tracking_ids(new_id, src_record)
 
-            if action == 'create':
-                logging.info(f"Creating product \"{src_record.default_code}\" ...")
-                new_id = dst_model.create(data)
-                src_record.write({'x_new_id': new_id})
-            elif action == 'update':
-                logging.info(f"Updating product \"{src_record.default_code}\" ...")
-                dst_record = None
-                if src_record.new_id is not None and src_record.new_id > 0:
-                    dst_record = dst_model.browse(src_record.new_id)
-                else:
-                    domain = [('default_code', '=', src_record.default_code
-                               )]
-                    result = dst_model.search(domain=domain, limit=1)
-                    if result is not None and len(result) > 0:
-                        dst_record = dst_model.browse(result[0])
-
-                if dst_record is not None:
-                    src_record.write({'x_new_id': dst_record.id})
+                elif action == 'update':
+                    logging.info(f"Updating product \"{src_record.default_code or 'No Code'}\" ...")
+                    dst_record = record['dst_record']
                     dst_record.write(data)
+                    self.update_tracking_ids(dst_record.id, src_record)

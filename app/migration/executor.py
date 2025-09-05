@@ -11,7 +11,7 @@ from .handlers.product_template import ProductTemplateHandler
 from .handlers.product_attribute_value import ProductAttributeValueHandler
 from .handlers.product_attribute_line import ProductAttributeLineHandler
 # from .handlers.product_template_attribute_value import ProductTemplateAttributeValueHandler
-# from .handlers.product_product import ProductProductHandler
+from .handlers.product_product import ProductProductHandler
 from .handlers.account_move import AccountMoveHandler
 from .handlers.account_payment import AccountPaymentHandler
 from .core.mapping import MappingProvider
@@ -39,31 +39,28 @@ class Migration:
         create_tracking_fields(self._configs)
 
         self.models_to_migrate = [
-            # 'res.users',
-            # 'res.partner',
-            # 'product.category',
-            # 'product.template',
-            'product.attribute',           # REQUIRED: Wi-Fi attribute must exist first
-            'product.attribute.value',     # REQUIRED: 2.4 GHz value must exist first
+            'res.users',
+            'res.partner',
+            'product.category',
+            'product.template',
+            'product.attribute',
+            'product.attribute.value',
             'product.attribute.line',
+            'product.product',
             # 'product.template.attribute.value',
-            # 'product.product',
             # 'account.move',
             # 'account.payment',
         ]
         self.models_handlers = {
-            # 'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'res.user'),
-            # 'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
-            # 'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.category'),
-            # 'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.template'),
+            'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'res.user'),
+            'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
+            'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.category'),
+            'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.template'),
             'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),
             'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, 'product.attribute.value'),
             'product.attribute.line': ProductAttributeLineHandler(self._odoo_provider, self._db_provider, 'product.attribute.line'),
-
-
-
+            'product.product': ProductProductHandler(self._odoo_provider, self._db_provider, 'product.product'),
             # 'product.template.attribute.value': ProductTemplateAttributeValueHandler(self._src_odoo, self._dst_odoo,self.mappings_provider),
-            # 'product.product': ProductProductHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
             # 'account.move': AccountMoveHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
             # 'account.payment': AccountPaymentHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
         }
