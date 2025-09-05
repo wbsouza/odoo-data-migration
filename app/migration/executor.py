@@ -43,8 +43,8 @@ class Migration:
             # 'res.partner',
             # 'product.category',
             # 'product.template',
-            # 'product.attribute',
-            # 'product.attribute.value',
+            'product.attribute',           # REQUIRED: Wi-Fi attribute must exist first
+            'product.attribute.value',     # REQUIRED: 2.4 GHz value must exist first
             'product.attribute.line',
             # 'product.template.attribute.value',
             # 'product.product',
@@ -56,8 +56,8 @@ class Migration:
             # 'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
             # 'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.category'),
             # 'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.template'),
-            # 'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),
-            # 'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, 'product.attribute.value'),
+            'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),
+            'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, 'product.attribute.value'),
             'product.attribute.line': ProductAttributeLineHandler(self._odoo_provider, self._db_provider, 'product.attribute.line'),
 
 
