@@ -12,18 +12,15 @@ class ProductAttributeValueHandler(DomainHandler):
             self,
             odoo_provider: OdooConnectionProvider,
             db_provider: DBConnectionProvider,
-            mapping_provider: MappingProvider,
             model_name: str
     ):
         """
         Initialize the ProductAttributeValueHandler with the provider pattern.
         :param odoo_provider: OdooConnectionProvider instance.
         :param db_provider: DBConnectionProvider instance.
-        :param mapping_provider: An instance of MappingProvider to handle ID mappings.
         :param model_name: The model name to migrate.
         """
-        super().__init__(odoo_provider, db_provider, 'product.attribute.value')
-        self._mapping_provider = mapping_provider
+        super().__init__(odoo_provider, db_provider, model_name)
 
     def find_dest_group_id(self, src_group: Any) -> Optional[int]:
         """
@@ -116,5 +113,5 @@ class ProductAttributeValueHandler(DomainHandler):
 
                 self.update_tracking_ids(
                     new_id=new_id,
-                    src_record=src_record
+                    record=src_record
                 )

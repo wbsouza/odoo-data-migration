@@ -39,26 +39,29 @@ class Migration:
         create_tracking_fields(self._configs)
 
         self.models_to_migrate = [
-            'res.users',
-            'res.partner',
-            'product.category',
-            'product.template',
-            'product.attribute',
-            'product.attribute.value',
-            # 'product.attribute.line',  # This model doesn't exist in Odoo 17
+            # 'res.users',
+            # 'res.partner',
+            # 'product.category',
+            # 'product.template',
+            # 'product.attribute',
+            # 'product.attribute.value',
+            'product.attribute.line',
             # 'product.template.attribute.value',
             # 'product.product',
             # 'account.move',
             # 'account.payment',
         ]
         self.models_handlers = {
-            'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'res.user'),
-            'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
-            'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.category'),
-            'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.template'),
-            'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),
-            'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute.value'),
-            # 'product.attribute.line': ProductAttributeLineHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            # 'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'res.user'),
+            # 'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
+            # 'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.category'),
+            # 'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.template'),
+            # 'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),
+            # 'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, 'product.attribute.value'),
+            'product.attribute.line': ProductAttributeLineHandler(self._odoo_provider, self._db_provider, 'product.attribute.line'),
+
+
+
             # 'product.template.attribute.value': ProductTemplateAttributeValueHandler(self._src_odoo, self._dst_odoo,self.mappings_provider),
             # 'product.product': ProductProductHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
             # 'account.move': AccountMoveHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),

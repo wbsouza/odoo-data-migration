@@ -93,5 +93,5 @@ class ResPartnerHandler(DomainHandler):
 
                 self.update_tracking_ids(
                     new_id=new_id,
-                    src_record=src_record
+                    record=src_record
                 )

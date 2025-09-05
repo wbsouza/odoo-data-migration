@@ -1,2 +1,4 @@
 odoorpc
 psycopg2-binary
+pydevd-odoo
+pydevd-pycharm

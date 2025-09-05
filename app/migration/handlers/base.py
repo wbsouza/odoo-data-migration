@@ -103,20 +103,20 @@ class DomainHandler:
             _logger.error(f"Failed to update tracking id: {ex}")
             return False
 
-    def update_tracking_ids(self, new_id: int, src_record: Any):
+    def update_tracking_ids(self, new_id: int, record: Any):
         result = self._update_tracking_id(
             connection_type=SOURCE,
             model_name=self.src_model_name,
             field_name='x_new_id',
             field_value=new_id,
-            record_id=src_record.id
+            record_id=record.id
         )
         if result:
             self._update_tracking_id(
                 connection_type=DESTINATION,
                 model_name=self.get_dst_model_name(),
                 field_name='x_old_id',
-                field_value=src_record.id,
+                field_value=record.id,
                 record_id=new_id
             )
         return result
