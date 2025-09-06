@@ -25,7 +25,6 @@ class ResourceNotFoundException(Exception):
         super().__init__(self.message)
 
 
-
 class DomainHandler:
 
     def __init__(self, odoo_provider: OdooConnectionProvider, db_provider: DBConnectionProvider, model_name: str):
@@ -33,16 +32,20 @@ class DomainHandler:
         self._db_provider = db_provider
         self.src_model_name = model_name
 
-    def get_src_model(self) -> Any:
+    def get_src_model(self, model_name: str = None) -> Any:
+        if model_name is None:
+            model_name = self.src_model_name
         odoo_conn = self._odoo_provider.get_odoo_connection(SOURCE)
-        return odoo_conn.session.env[self.src_model_name]
+        return odoo_conn.session.env[model_name].with_context(active_test=False)
 
     def get_dst_model_name(self) -> Any:
         return self.src_model_name
 
-    def get_dst_model(self) -> Any:
+    def get_dst_model(self, model_name: str = None) -> Any:
+        if model_name is None:
+            model_name = self.get_dst_model_name()
         odoo_conn = self._odoo_provider.get_odoo_connection(DESTINATION)
-        return odoo_conn.session.env[self.get_dst_model_name()]
+        return odoo_conn.session.env[model_name].with_context(active_test=False)
 
     @staticmethod
     def record_exists(odoo: OdooConnection, model_name: str, field: str, value: str) -> bool:

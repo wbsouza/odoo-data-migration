@@ -1,9 +1,8 @@
 import logging
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
-from .base import DomainHandler, ResourceNotFoundException
-from ..core.mapping import MappingProvider
+from .base import DomainHandler
 from ..core.odoo_connection import OdooConnectionProvider, SOURCE, DESTINATION
-from ..core.database import DBConnectionProvider, fetch_sql
+from ..core.database import DBConnectionProvider, find_id_by_old_id
 
 class ProductProductHandler(DomainHandler):
 
@@ -25,19 +24,16 @@ class ProductProductHandler(DomainHandler):
 
     def find_dst_product(self, src_record):
         conn = self._db_provider.get_connection(DESTINATION)
-        sql = f"SELECT id FROM product_template WHERE x_old_id = {src_record.product_tmpl_id.id} LIMIT 1"
-        rows = fetch_sql(conn, sql)
-        if not rows:
+        dst_product_tmpl_id = find_id_by_old_id(conn, 'product_template', src_record.product_tmpl_id.id)
+        if not dst_product_tmpl_id or dst_product_tmpl_id is None:
             raise ValueError(f"Product template '{src_record.product_tmpl_id.name}' not found in destination")
 
-        # get the new product template id generated from the source product template
-        dst_product_tmpl_id = rows[0]['id']
-
+        # Include both active and archived records in search
         domain = [('product_tmpl_id', '=', dst_product_tmpl_id)]
         if src_record.default_code is not None and src_record.default_code and src_record.default_code != '':
             domain.append(('default_code', '=', src_record.default_code))
 
-        model = self._odoo_dst.session.env['product.product']
+        model = self.get_dst_model()
         product_ids = model.search(domain, limit=1)
         if product_ids:
             return model.browse(product_ids[0])

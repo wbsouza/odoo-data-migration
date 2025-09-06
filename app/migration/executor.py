@@ -5,6 +5,7 @@ from configparser import ConfigParser
 from .handlers.base import ResourceNotFoundException, HandlerNotFoundException
 from .handlers.res_users import ResUsersHandler
 from .handlers.res_partner import ResPartnerHandler
+from .handlers.res_partner_parent import ResPartnerParentHandler
 from .handlers.product_category import ProductCategoryHandler
 from .handlers.product_attribute import ProductAttributeHandler
 from .handlers.product_template import ProductTemplateHandler
@@ -36,10 +37,10 @@ class Migration:
         self._mappings_provider = MappingProvider(configs, self._odoo_provider, mappings_dir)
         self._mappings_provider.load_mappings_from_database("res.groups", "name")
         create_tracking_fields(self._configs)
-
         self.models_to_migrate = [
-            'res.users',
             'res.partner',
+            'res.partner.parent',  # Second phase for parent_id relationships
+            'res.users',
             'product.category',
             'product.template',
             'product.attribute',
@@ -49,9 +50,11 @@ class Migration:
             # 'account.move',
             # 'account.payment',
         ]
+
         self.models_handlers = {
-            'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'res.user'),
             'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
+            'res.partner.parent': ResPartnerParentHandler(self._odoo_provider, self._db_provider, 'res.partner'),
+            'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, 'res.user'),
             'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.category'),
             'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.template'),
             'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),
@@ -79,8 +82,25 @@ class Migration:
             offset = 0
             batch_size = 100
             while not eof:
+
                 src_odoo = self._odoo_provider.get_odoo_connection(SOURCE)
-                records = handler.fetch_items(src_odoo, model_name, offset=offset,limit=batch_size, order="id")
+
+                # Include both active and archived records in migration
+                domain = ['|', ('active', '=', True), ('active', '=', False)]
+
+                source_model_name = model_name
+                if model_name == 'res.partner.parent':
+                    source_model_name = 'res.partner'
+
+                records = handler.fetch_items(
+                    odoo=src_odoo,
+                    model_name=source_model_name,
+                    domain=domain,
+                    offset=offset,
+                    limit=batch_size,
+                    order="id"
+                )
+
                 eof = records is not None and len(records) < 1
                 if not eof:
                     _logger.info(f"Fetched {len(records)} records for {model_name}. Applying transformations...")

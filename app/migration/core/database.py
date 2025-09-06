@@ -78,6 +78,48 @@ def fetch_sql(conn: connection, sql: str):
         raise RuntimeError(f"Failed to fetch SQL: {e}")
 
 
+def find_record_by_old_id(conn: connection, table_name: str, old_id: int):
+    """
+    Find a record in the destination database using x_old_id.
+    This is more reliable than name-based lookups which can have duplicates.
+    
+    :param conn: Database connection to destination
+    :param table_name: Table name (e.g., 'product_template')
+    :param old_id: The source record ID to look for
+    :return: Dictionary with record data or None if not found
+    """
+    try:
+        sql = f"SELECT * FROM {table_name} WHERE x_old_id = {old_id} LIMIT 1"
+        rows = fetch_sql(conn, sql)
+        return rows[0] if rows else None
+    except Exception as e:
+        # Log the error but don't crash - return None to indicate record not found
+        import logging
+        logging.getLogger(__name__).warning(f"Error finding record by old_id {old_id} in {table_name}: {e}")
+        return None
+
+
+def find_id_by_old_id(conn: connection, table_name: str, old_id: int):
+    """
+    Find a record ID in the destination database using x_old_id.
+    Returns only the scalar ID value, compatible with OdooRPC operations.
+    
+    :param conn: Database connection to destination
+    :param table_name: Table name (e.g., 'product_template')
+    :param old_id: The source record ID to look for
+    :return: Integer ID or None if not found
+    """
+    try:
+        sql = f"SELECT id FROM {table_name} WHERE x_old_id = {old_id} LIMIT 1"
+        rows = fetch_sql(conn, sql)
+        return rows[0]['id'] if rows else None
+    except Exception as e:
+        # Log the error but don't crash - return None to indicate record not found
+        import logging
+        logging.getLogger(__name__).warning(f"Error finding ID by old_id {old_id} in {table_name}: {e}")
+        return None
+
+
 
 def create_tracking_fields(config: ConfigParser):
     connection_provider = DBConnectionProvider(config)
