@@ -54,7 +54,7 @@ class Migration:
         self.models_handlers = {
             'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
             'res.partner.parent': ResPartnerParentHandler(self._odoo_provider, self._db_provider, 'res.partner'),
-            'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, 'res.user'),
+            'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, 'res.users'),
             'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.category'),
             'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.template'),
             'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),

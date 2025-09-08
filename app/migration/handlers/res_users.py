@@ -22,8 +22,11 @@ class ResUsersHandler(DomainHandler):
         """Find user in destination using login field (primary method for users)"""
         # Include both active and inactive users in search
         domain = [('login', '=', src_record.login)]
-        existing_users = self.get_dst_model().search(domain, limit=1)
-        return existing_users[0] if existing_users else None
+        existing_user_id = self.get_dst_model().search(domain, limit=1)
+        existing_user = None
+        if existing_user_id:
+            existing_user = self.get_dst_model().browse(existing_user_id[0])
+        return existing_user
 
     def find_dest_partner_by_old_id(self, src_record):
         """
