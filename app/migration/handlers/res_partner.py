@@ -36,7 +36,7 @@ class ResPartnerHandler(DomainHandler):
             return None
         country_model = self.get_dst_model('res.country')
         countries = country_model.search([('name', '=', src_country.name)], limit=1)
-        return countries[0].id if countries else None
+        return countries[0] if countries else None
 
     def find_dest_state_by_name(self, src_state):
         """Find destination state by name and country"""
@@ -50,7 +50,7 @@ class ResPartnerHandler(DomainHandler):
             if country_id:
                 domain.append(('country_id', '=', country_id))
         states = state_model.search(domain, limit=1)
-        return states[0].id if states else None
+        return states[0] if states else None
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         dst_record = self.find_dest_partner_by_old_id(src_record)
@@ -70,10 +70,10 @@ class ResPartnerHandler(DomainHandler):
                 'website': src_record.website,
                 'comment': src_record.comment,
                 'active': src_record.active,
-                'customer': src_record.customer,
-                'supplier': src_record.supplier,
-                'employee': src_record.employee,
-                'function': src_record.function,
+                #'customer': src_record.customer,
+                #'supplier': src_record.supplier,
+                #'employee': src_record.employee,
+                #'function': src_record.function,
                 'type': src_record.type,
                 'street': src_record.street,
                 'street2': src_record.street2,
