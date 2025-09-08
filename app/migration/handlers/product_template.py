@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any
 
 from .base import DomainHandler
 from ..core.mapping import MappingProvider
-from ..core.odoo_connection import OdooConnectionProvider, DESTINATION
+from ..core.odoo_connection import OdooConnectionProvider, DESTINATION, SOURCE
 from ..core.database import DBConnectionProvider
 
 
@@ -14,11 +14,9 @@ class ProductTemplateHandler(DomainHandler):
             self,
             odoo_provider: OdooConnectionProvider,
             db_provider: DBConnectionProvider,
-            mapping_provider: MappingProvider,
             model_name: str
     ):
-        super().__init__(odoo_provider, db_provider, 'product.template')
-        self._mapping_provider = mapping_provider
+        super().__init__(odoo_provider, db_provider, model_name)
 
     def find_dest_group_id(self, src_group: Any) -> Optional[int]:
         """

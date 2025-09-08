@@ -64,12 +64,11 @@ class DomainHandler:
             _logger.error(str(ex))
             raise ResourceNotFoundException()
 
-    @staticmethod
-    def fetch_items(odoo: OdooConnection, model_name: str, domain=None, offset: int = 0, order: str = None,
+    def fetch_items(self, odoo: OdooConnection, model_name: str, domain=None, offset: int = 0, order: str = None,
                     limit: int = 100) -> List[Dict]:
         result = []
         domain = [] if domain is None else domain
-        model = odoo.session.env[model_name]
+        model = self.get_src_model(model_name)
         ids = model.search(domain, offset=offset, limit=limit, order=order)
         for record in model.browse(ids):
             result.append(record)

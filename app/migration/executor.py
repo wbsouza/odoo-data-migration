@@ -38,29 +38,29 @@ class Migration:
         self._mappings_provider.load_mappings_from_database("res.groups", "name")
         create_tracking_fields(self._configs)
         self.models_to_migrate = [
-            'res.partner',
-            'res.partner.parent',  # Second phase for parent_id relationships
-            'res.users',
             'product.category',
             'product.template',
             'product.attribute',
             'product.attribute.value',
             'product.attribute.line',
             'product.product',
+            # 'res.partner',
+            # 'res.partner.parent',  # Second phase for parent_id relationships
+            # 'res.users',
             # 'account.move',
             # 'account.payment',
         ]
 
         self.models_handlers = {
-            'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
-            'res.partner.parent': ResPartnerParentHandler(self._odoo_provider, self._db_provider, 'res.partner'),
-            'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, 'res.users'),
-            'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.category'),
-            'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.template'),
+            'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, 'product.category'),
+            'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, 'product.template'),
             'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),
             'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, 'product.attribute.value'),
             'product.attribute.line': ProductAttributeLineHandler(self._odoo_provider, self._db_provider, 'product.attribute.line'),
             'product.product': ProductProductHandler(self._odoo_provider, self._db_provider, 'product.product'),
+            # 'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
+            # 'res.partner.parent': ResPartnerParentHandler(self._odoo_provider, self._db_provider, 'res.partner'),
+            # 'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, 'res.users'),
             # 'account.move': AccountMoveHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
             # 'account.payment': AccountPaymentHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
         }
@@ -86,8 +86,6 @@ class Migration:
                 src_odoo = self._odoo_provider.get_odoo_connection(SOURCE)
 
                 # Include both active and archived records in migration
-                domain = ['|', ('active', '=', True), ('active', '=', False)]
-
                 source_model_name = model_name
                 if model_name == 'res.partner.parent':
                     source_model_name = 'res.partner'
@@ -95,7 +93,6 @@ class Migration:
                 records = handler.fetch_items(
                     odoo=src_odoo,
                     model_name=source_model_name,
-                    domain=domain,
                     offset=offset,
                     limit=batch_size,
                     order="id"

@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Any
 
 from .base import DomainHandler
 from ..core.mapping import MappingProvider
-from ..core.odoo_connection import OdooConnectionProvider, DESTINATION
+from ..core.odoo_connection import OdooConnectionProvider, DESTINATION, SOURCE
 from ..core.database import DBConnectionProvider
 
 
@@ -17,7 +17,7 @@ class ProductAttributeHandler(DomainHandler):
             mapping_provider: MappingProvider,
             model_name: str
     ):
-        super().__init__(odoo_provider, db_provider, 'product.attribute')
+        super().__init__(odoo_provider, db_provider, model_name)
         self._mapping_provider = mapping_provider
 
     def find_dest_group_id(self, src_group: Any) -> Optional[int]:
@@ -58,6 +58,18 @@ class ProductAttributeHandler(DomainHandler):
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
         return None
+
+    def get_src_model(self, model_name: str = None) -> Any:
+        if model_name is None:
+            model_name = self.src_model_name
+        odoo_conn = self._odoo_provider.get_odoo_connection(SOURCE)
+        return odoo_conn.session.env[model_name]
+
+    def get_dst_model(self, model_name: str = None) -> Any:
+        if model_name is None:
+            model_name = self.get_dst_model_name()
+        odoo_conn = self._odoo_provider.get_odoo_connection(DESTINATION)
+        return odoo_conn.session.env[model_name]
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         transformed_record = {
