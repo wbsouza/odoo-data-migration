@@ -71,7 +71,6 @@ class ResUsersHandler(DomainHandler):
                 'company_id': src_record.company_id.id,
                 'lang': src_record.lang,
                 'tz': src_record.tz,
-                'active': src_record.active,  # Preserve active/inactive status
             }
         }]
         return result

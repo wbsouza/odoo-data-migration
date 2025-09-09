@@ -69,7 +69,6 @@ class ResPartnerHandler(DomainHandler):
                 'vat': src_record.vat,
                 'website': src_record.website,
                 'comment': src_record.comment,
-                'active': src_record.active,
                 'function': src_record.function,
                 'type': src_record.type,
                 'street': src_record.street,

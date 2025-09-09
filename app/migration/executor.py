@@ -1,5 +1,6 @@
 import logging
 
+import traceback
 from configparser import ConfigParser
 
 from .handlers.base import ResourceNotFoundException, HandlerNotFoundException
@@ -38,29 +39,29 @@ class Migration:
         self._mappings_provider.load_mappings_from_database("res.groups", "name")
         create_tracking_fields(self._configs)
         self.models_to_migrate = [
-            'product.category',
-            'product.template',
-            'product.attribute',
-            'product.attribute.value',
-            'product.attribute.line',
-            'product.product',
-            # 'res.partner',
-            # 'res.partner.parent',  # Second phase for parent_id relationships
-            # 'res.users',
+            # 'product.category',
+            # 'product.template',
+            # 'product.attribute',
+            # 'product.attribute.value',
+            # 'product.attribute.line',
+            # 'product.product',
+            'res.partner',
+            'res.partner.parent',  # Second phase for parent_id relationships
+            'res.users',
             # 'account.move',
             # 'account.payment',
         ]
 
         self.models_handlers = {
-            'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, 'product.category'),
-            'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, 'product.template'),
-            'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),
-            'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, 'product.attribute.value'),
-            'product.attribute.line': ProductAttributeLineHandler(self._odoo_provider, self._db_provider, 'product.attribute.line'),
-            'product.product': ProductProductHandler(self._odoo_provider, self._db_provider, 'product.product'),
-            # 'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
-            # 'res.partner.parent': ResPartnerParentHandler(self._odoo_provider, self._db_provider, 'res.partner'),
-            # 'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, 'res.users'),
+            # 'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, 'product.category'),
+            # 'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, 'product.template'),
+            # 'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),
+            # 'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, 'product.attribute.value'),
+            # 'product.attribute.line': ProductAttributeLineHandler(self._odoo_provider, self._db_provider, 'product.attribute.line'),
+            # 'product.product': ProductProductHandler(self._odoo_provider, self._db_provider, 'product.product'),
+            'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
+            'res.partner.parent': ResPartnerParentHandler(self._odoo_provider, self._db_provider, 'res.partner'),
+            'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, 'res.users'),
             # 'account.move': AccountMoveHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
             # 'account.payment': AccountPaymentHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
         }
@@ -117,6 +118,8 @@ class Migration:
             _logger.error(f"Error during migration of {model_name}: {str(e)}")
         except Exception as e:
             _logger.error(f"Unexpected error during migration of {model_name}: {str(e)}")
+            _logger.error(traceback.format_exc())
+
 
     def run(self):
         """
