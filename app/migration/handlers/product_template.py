@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any
 from .base import DomainHandler
 from ..core.mapping import MappingProvider
 from ..core.odoo_connection import OdooConnectionProvider, DESTINATION, SOURCE
-from ..core.database import DBConnectionProvider, find_id_by_old_id
+from ..core.database import DBConnectionProvider, find_id_by_old_id, find_id_by_name
 
 
 class ProductTemplateHandler(DomainHandler):
@@ -17,14 +17,6 @@ class ProductTemplateHandler(DomainHandler):
             model_name: str
     ):
         super().__init__(odoo_provider, db_provider, model_name)
-
-    def find_uom_by_name(self, name):
-        domain = [('name', '=', name)]
-        dst_model = self.get_dst_model('uom.uom')
-        ids = dst_model.search(domain, limit=1)
-        if ids is not None and len(ids):
-            return dst_model.browse(ids[0])[0]
-        return None
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         db_conn = self._db_provider.get_connection(DESTINATION)
@@ -41,7 +33,7 @@ class ProductTemplateHandler(DomainHandler):
                 'active': src_record.active,
                 'default_code': src_record.default_code,
                 'categ_id': find_id_by_old_id(db_conn, 'product_category', src_record.categ_id.id),
-                'uom_id': self.find_uom_by_name(src_record.uom_id.name),
+                'uom_id': find_id_by_name(db_conn, 'uom_uom', src_record.uom_id.name),
                 'detailed_type': src_record.type,
                 'sale_ok': src_record.sale_ok,
                 'purchase_ok': src_record.purchase_ok,

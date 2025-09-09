@@ -2,10 +2,13 @@ import os
 import psycopg2
 from psycopg2 import OperationalError
 from psycopg2.extensions import connection
-
+import re
 from configparser import ConfigParser
 from typing import Dict, Tuple, Any
 
+import logging
+
+_logger = logging.getLogger(__name__)
 
 class DBConnectionProvider:
 
@@ -78,6 +81,30 @@ def fetch_sql(conn: connection, sql: str):
         raise RuntimeError(f"Failed to fetch SQL: {e}")
 
 
+def find_record_by_field_name(conn: connection, table_name: str, field_name: str, field_value: Any):
+    try:
+        if isinstance(field_value, str):
+            field_value = f"'{field_value}'"
+        sql = f"SELECT * FROM {table_name} WHERE {field_name} = {field_value} LIMIT 1"
+        rows = fetch_sql(conn, sql)
+        return rows[0] if rows else None
+    except Exception as e:
+        _logger.warning(f"Error finding record by {field_name} = {field_value} in {table_name}: {e}")
+        return None
+
+
+def find_id_by_field_name(conn: connection, table_name: str, field_name: str, field_value: Any):
+    try:
+        if isinstance(field_value, str):
+            field_value = f"'{field_value}'"
+        sql = f"SELECT id FROM {table_name} WHERE {field_name} = {field_value} LIMIT 1"
+        rows = fetch_sql(conn, sql)
+        return rows[0]['id'] if rows else None
+    except Exception as e:
+        _logger.warning(f"Error finding ID by {field_name} = {field_value} in {table_name}: {e}")
+        return None
+
+
 def find_record_by_old_id(conn: connection, table_name: str, old_id: int):
     """
     Find a record in the destination database using x_old_id.
@@ -88,15 +115,7 @@ def find_record_by_old_id(conn: connection, table_name: str, old_id: int):
     :param old_id: The source record ID to look for
     :return: Dictionary with record data or None if not found
     """
-    try:
-        sql = f"SELECT * FROM {table_name} WHERE x_old_id = {old_id} LIMIT 1"
-        rows = fetch_sql(conn, sql)
-        return rows[0] if rows else None
-    except Exception as e:
-        # Log the error but don't crash - return None to indicate record not found
-        import logging
-        logging.getLogger(__name__).warning(f"Error finding record by old_id {old_id} in {table_name}: {e}")
-        return None
+    return find_record_by_field_name(conn, table_name, 'x_old_id', old_id)
 
 
 def find_id_by_old_id(conn: connection, table_name: str, old_id: int):
@@ -109,17 +128,33 @@ def find_id_by_old_id(conn: connection, table_name: str, old_id: int):
     :param old_id: The source record ID to look for
     :return: Integer ID or None if not found
     """
+    return find_id_by_field_name(conn, table_name, 'x_old_id', old_id)
+
+
+def find_id_by_name(conn: connection, table_name: str, name: str):
+    """
+    Find a record ID in the destination database using name.
+    Returns only the scalar ID value, compatible with OdooRPC operations.
+
+    :param conn: Database connection to destination
+    :param table_name: Table name (e.g., 'product_template')
+    :param name: The name to look for
+    :return: Integer ID or None if not found
+    """
     try:
-        sql = f"SELECT id FROM {table_name} WHERE x_old_id = {old_id} LIMIT 1"
+        lower_name = name.strip().lower()
+        lower_name = re.sub(r'\(s\)', '', lower_name).strip()
+        sql = f"SELECT id FROM {table_name} WHERE LOWER(name->>'en_US') LIKE '{lower_name}%' LIMIT 1"
         rows = fetch_sql(conn, sql)
         return rows[0]['id'] if rows else None
     except Exception as e:
-        # Log the error but don't crash - return None to indicate record not found
-        import logging
-        logging.getLogger(__name__).warning(f"Error finding ID by old_id {old_id} in {table_name}: {e}")
+        _logger.warning(f"Error finding ID by name = '{name}' in {table_name}: {e}")
         return None
 
 
+
+
+    return find_id_by_field_name(conn, table_name, 'name', name)
 
 def create_tracking_fields(config: ConfigParser):
     connection_provider = DBConnectionProvider(config)
