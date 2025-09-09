@@ -62,8 +62,8 @@ class Migration:
             'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
             'res.partner.parent': ResPartnerParentHandler(self._odoo_provider, self._db_provider, 'res.partner'),
             'res.users': ResUsersHandler(self._odoo_provider, self._db_provider, 'res.users'),
-            # 'account.move': AccountMoveHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
-            # 'account.payment': AccountPaymentHandler(self._src_odoo, self._dst_odoo, self.mappings_provider),
+            'account.move': AccountMoveHandler(self._odoo_provider, self._db_provider, 'account.move'),
+            'account.payment': AccountPaymentHandler(self._odoo_provider, self._db_provider, 'account.payment'),
         }
 
 
