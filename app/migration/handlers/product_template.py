@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Any
 from .base import DomainHandler
 from ..core.mapping import MappingProvider
 from ..core.odoo_connection import OdooConnectionProvider, DESTINATION, SOURCE
-from ..core.database import DBConnectionProvider
+from ..core.database import DBConnectionProvider, find_id_by_old_id
 
 
 class ProductTemplateHandler(DomainHandler):
@@ -18,41 +18,42 @@ class ProductTemplateHandler(DomainHandler):
     ):
         super().__init__(odoo_provider, db_provider, model_name)
 
-    def find_dest_group_id(self, src_group: Any) -> Optional[int]:
-        """
-        Find the matching category ID in the destination Odoo (Odoo 16) based on the source category ID from Odoo 11.
-        First check the mappings cache, and if not found, perform a lookup.
-        :param src_group: The source category
-        :return: The destination category ID.
-        """
-
-        if src_group is not None:
-            domain = [('name', '=', src_group
-            ['name'])]
-            resp = self._odoo_provider.get_odoo_connection(DESTINATION).fetch_ids('res.groups', domain=domain, limit=1)
-            if resp is not None and len(resp) > 0:
-                return resp[0]
-        return None
-
-    def find_template_by_name(self, name) -> bool:
+    def find_uom_by_name(self, name):
         domain = [('name', '=', name)]
-        odoo_dst = self._odoo_provider.get_odoo_connection(DESTINATION)
-        model = odoo_dst.session.env[self.src_model_name]
-        ids = model.search(domain, limit=1)
+        dst_model = self.get_dst_model('uom.uom')
+        ids = dst_model.search(domain, limit=1)
         if ids is not None and len(ids):
-            return model.browse(ids[0])[0]
+            return dst_model.browse(ids[0])[0]
         return None
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
+        db_conn = self._db_provider.get_connection(DESTINATION)
+        table_name = self.get_dst_model_name().replace('.', '_')
+        dst_id = find_id_by_old_id(db_conn, table_name, src_record.id)
+
         transformed_record = {
-            'action': 'create',
+            'action': 'update' if dst_id else 'create',
             'model': 'product.template',
             'src_record': src_record,
-            'dst_record': self.find_template_by_name(src_record.name),
+            'dst_record': self.get_dst_model().browse(dst_id) if dst_id else None,
             'data': {
                 'name': src_record.name,
+                'active': src_record.active,
                 'default_code': src_record.default_code,
-                # 'groups_id': [(6, 0, dst_group_ids)],
+                'categ_id': find_id_by_old_id(db_conn, 'product_category', src_record.categ_id.id),
+                'uom_id': self.find_uom_by_name(src_record.uom_id.name),
+                'detailed_type': src_record.type,
+                'sale_ok': src_record.sale_ok,
+                'purchase_ok': src_record.purchase_ok,
+                'list_price': src_record.list_price or None,
+                'volume': src_record.volume or None,
+                'weight': src_record.weight or None,
+                'invoice_policy': src_record.invoice_policy or None,
+                'expense_policy': src_record.expense_policy or None,
+                'tracking': src_record.tracking or None,
+                'description': src_record.description or None,
+                'description_purchase': src_record.description_purchase or None,
+                'description_sale': src_record.description_sale or None,
             }
         }
 
@@ -78,7 +79,7 @@ class ProductTemplateHandler(DomainHandler):
 
                 if action == 'create':
                     dst_model = self.get_dst_model()
-                    logging.info(f"Creating {self.get_dst_model_name()} \"{src_record.name}\" ...")
+                    logging.info(f"Creating {model_name} \"{src_record.name}\" ...")
                     new_id = dst_model.create(data)
 
                 elif action == 'update':

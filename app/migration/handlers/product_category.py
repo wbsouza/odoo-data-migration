@@ -3,8 +3,7 @@ import logging
 from typing import Dict, List, Optional, Any
 
 from .base import DomainHandler
-from ..core.mapping import MappingProvider
-from ..core.odoo_connection import OdooConnectionProvider, DESTINATION, SOURCE
+from ..core.odoo_connection import OdooConnectionProvider, DESTINATION
 from ..core.database import DBConnectionProvider
 
 
@@ -82,10 +81,8 @@ class ProductCategoryHandler(DomainHandler):
             'src_record': src_record,
             'dst_record': self.find_category_by_name(src_record.name),
             'data': {
-                'parent_id': dst_parent.id if dst_parent is not None else dst_parent,
                 'name': src_record.name,
                 'complete_name': src_record.complete_name,
-                'parent_path': self.create_parent_path(src_record)
                 # 'groups_id': [(6, 0, dst_group_ids)],
                 # 'x_old_id': src_record.id  # This field will be set via update_tracking_ids method
             }
