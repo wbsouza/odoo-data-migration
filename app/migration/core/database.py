@@ -196,6 +196,8 @@ def create_tracking_fields(config: ConfigParser):
         'product_template_attribute_line',
         'product_template',
         'product_product',
+        'account_move',
+        'account_move_line',
 
     ]
 

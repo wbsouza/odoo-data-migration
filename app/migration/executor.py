@@ -48,7 +48,7 @@ class Migration:
             'res.partner',
             'res.partner.parent',  # Second phase for parent_id relationships
             'res.users',
-            # 'account.move',
+            'account.move',
             # 'account.payment',
         ]
 
@@ -91,9 +91,15 @@ class Migration:
                 if model_name == 'res.partner.parent':
                     source_model_name = 'res.partner'
 
+                # For testing: limit account.move to id=3 only
+                domain = None
+                if model_name == 'account.move':
+                    domain = [('id', '=', 3)]
+
                 records = handler.fetch_items(
                     odoo=src_odoo,
                     model_name=source_model_name,
+                    domain=domain,
                     offset=offset,
                     limit=batch_size,
                     order="id"
