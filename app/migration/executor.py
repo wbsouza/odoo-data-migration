@@ -90,11 +90,16 @@ class Migration:
                 source_model_name = model_name
                 if model_name == 'res.partner.parent':
                     source_model_name = 'res.partner'
+                # Odoo 11 source model for invoices is 'account.invoice'
+                if model_name == 'account.move':
+                    source_model_name = 'account.invoice'
+
+                domain = None
 
                 # For testing: limit account.move to id=3 only
-                domain = None
-                if model_name == 'account.move':
-                    domain = [('id', '=', 3)]
+                # domain = None
+                # if model_name == 'account.move':
+                #     domain = [('id', '=', 3)]
 
                 records = handler.fetch_items(
                     odoo=src_odoo,
