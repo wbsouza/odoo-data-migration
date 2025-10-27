@@ -207,7 +207,7 @@ class ProductAttributeLineHandler(DomainHandler):
             'data': {
                 'attribute_id': dst_attribute.id,
                 'product_tmpl_id': product_tmpl.id,
-                'x_old_id': src_record.id,  # This field will be set via update_tracking_ids method
+                'old_id': src_record.id,  # This field will be set via update_tracking_ids method
                 'value_ids': [(6, 0, values_ids)],
             }
         }
@@ -229,8 +229,8 @@ class ProductAttributeLineHandler(DomainHandler):
             action = record['action']
             src_model = self._odoo_src.session.env[self.src_model_name]
 
-            if 'x_old_id' in data:
-                old_id = data.pop('x_old_id')
+            if 'old_id' in data:
+                old_id = data.pop('old_id')
                 src_record = src_model.browse(old_id)
                 dst_model = self._odoo_dst.session.env[self.get_dst_model_name()]
 

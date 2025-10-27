@@ -25,14 +25,14 @@ class AccountMoveHandler(DomainHandler):
 
     # --- Mapping helpers (source old_id -> destination new id) ---
     def get_new_user_id_from_old_id(self, old_id: Optional[int]) -> Optional[int]:
-        """Map source res.users.id to destination id via x_old_id."""
+        """Map source res.users.id to destination id via old_id."""
         if not old_id:
             return None
         conn = self._db_provider.get_connection(DESTINATION)
         return find_id_by_old_id(conn, 'res_users', old_id)
 
     def get_new_partner_id_from_old_id(self, old_id: Optional[int]) -> Optional[int]:
-        """Map source res.partner.id to destination id via x_old_id."""
+        """Map source res.partner.id to destination id via old_id."""
         if not old_id:
             return None
         conn = self._db_provider.get_connection(DESTINATION)
@@ -175,7 +175,7 @@ class AccountMoveHandler(DomainHandler):
             'start_date': _safe_str(getattr(src_record, 'start_date', False)) or False,
             'end_date': _safe_str(getattr(src_record, 'end_date', False)) or False,
             'fiscal_position_id': fiscal_position_id,
-            #'x_old_id': src_record.id, 0
+            'old_id': src_record.id,
         }
         # Optional textual fields
         invoice_data['ref'] = _safe_str(getattr(src_record, 'ref', False)) or False
@@ -199,7 +199,7 @@ class AccountMoveHandler(DomainHandler):
 
         invoice_head = self._get_invoice_data(company, partner, src_record)
 
-        # Check if record already exists using x_old_id (via DB connection)
+        # Check if record already exists using old_id (via DB connection)
         conn = self._db_provider.get_connection(DESTINATION)
         existing_record = find_record_by_old_id(conn, 'account_move', src_record.id)
 

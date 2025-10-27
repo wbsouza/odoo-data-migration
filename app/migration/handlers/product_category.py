@@ -84,7 +84,7 @@ class ProductCategoryHandler(DomainHandler):
                 'name': src_record.name,
                 'complete_name': src_record.complete_name,
                 # 'groups_id': [(6, 0, dst_group_ids)],
-                # 'x_old_id': src_record.id  # This field will be set via update_tracking_ids method
+                # 'old_id': src_record.id  # This field will be set via update_tracking_ids method
             }
         }
 

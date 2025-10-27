@@ -30,10 +30,10 @@ class ResUsersHandler(DomainHandler):
 
     def find_dest_partner_by_old_id(self, src_record):
         """
-        Find destination partner by x_old_id first, then fallback to name search.
+        Find destination partner by old_id first, then fallback to name search.
         Raises exception if not found by either method.
         """
-        # First try: lookup by x_old_id (from migration)
+        # First try: lookup by old_id (from migration)
         conn = self._db_provider.get_connection(DESTINATION)
         partner_id = find_id_by_old_id(conn, 'res_partner', src_record.partner_id.id)
         if partner_id is not None:
@@ -48,7 +48,7 @@ class ResUsersHandler(DomainHandler):
             
         # If neither method finds the partner, raise exception
         raise ValueError(f"Partner '{partner_name}' (source ID {src_record.partner_id.id}) "
-                         f"not found in destination by x_old_id or name. "
+                         f"not found in destination by old_id or name. "
                          f"Ensure res.partner migration completed successfully or partner exists in destination.")
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:

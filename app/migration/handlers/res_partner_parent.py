@@ -21,7 +21,7 @@ class ResPartnerParentHandler(DomainHandler):
         super().__init__(odoo_provider, db_provider, 'res.partner')
 
     def find_dest_partner_by_old_id(self, src_partner_id):
-        """Find destination partner by x_old_id"""
+        """Find destination partner by old_id"""
         if not src_partner_id:
             return None
         conn = self._db_provider.get_connection(DESTINATION)

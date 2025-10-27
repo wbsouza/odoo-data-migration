@@ -78,7 +78,7 @@ class ProductAttributeValueHandler(DomainHandler):
             'name': src_record.name,
             'attribute_id': dst_attribute.id,
             'sequence': dst_attribute.sequence,
-            # 'x_old_id': src_record.id,  # This field will be set via update_tracking_ids method
+            # 'old_id': src_record.id,  # This field will be set via update_tracking_ids method
             }
         }
 

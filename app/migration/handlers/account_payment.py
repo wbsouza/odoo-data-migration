@@ -41,12 +41,12 @@ class AccountPaymentHandler(DomainHandler):
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         conn = self._db_provider.get_connection(DESTINATION)
         
-        # Use x_old_id lookup for partner
+        # Use old_id lookup for partner
         partner_id = None
         if src_record.partner_id:
             partner_id = find_id_by_old_id(conn, 'res_partner', src_record.partner_id.id)
             if not partner_id:
-                logging.warning(f"Partner with x_old_id {src_record.partner_id.id} not found for payment {src_record.id}")
+                logging.warning(f"Partner with old_id {src_record.partner_id.id} not found for payment {src_record.id}")
 
         # Use name-based lookup for journal
         journal_id = None
@@ -63,7 +63,7 @@ class AccountPaymentHandler(DomainHandler):
         if hasattr(src_record, 'payment_method_id') and src_record.payment_method_id:
             payment_method_id = self.find_payment_method_by_name(src_record.payment_method_id.name)
 
-        # Check if record already exists using x_old_id
+        # Check if record already exists using old_id
         existing_record = find_record_by_old_id(conn, 'account_payment', src_record.id)
         
         # Get destination company_id from the Odoo connection
@@ -78,7 +78,7 @@ class AccountPaymentHandler(DomainHandler):
             'journal_id': journal_id,
             'payment_method_id': payment_method_id,
             'company_id': company_id,  # Use destination company
-            'x_old_id': src_record.id,
+            'old_id': src_record.id,
         }
 
         # Add currency if available

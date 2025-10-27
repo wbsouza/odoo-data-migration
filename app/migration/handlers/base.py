@@ -109,7 +109,7 @@ class DomainHandler:
         result = self._update_tracking_id(
             connection_type=SOURCE,
             model_name=self.src_model_name,
-            field_name='x_new_id',
+            field_name='new_id',
             field_value=new_id,
             record_id=record.id
         )
@@ -117,7 +117,7 @@ class DomainHandler:
             self._update_tracking_id(
                 connection_type=DESTINATION,
                 model_name=self.get_dst_model_name(),
-                field_name='x_old_id',
+                field_name='old_id',
                 field_value=record.id,
                 record_id=new_id
             )

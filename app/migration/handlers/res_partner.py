@@ -20,7 +20,7 @@ class ResPartnerHandler(DomainHandler):
 
 
     def find_dest_partner_by_old_id(self, src_record):
-        """Find partner in destination using x_old_id (more reliable than name-based lookup)"""
+        """Find partner in destination using old_id (more reliable than name-based lookup)"""
         conn = self._db_provider.get_connection(DESTINATION)
         dst_record = find_record_by_old_id(conn, 'res_partner', src_record.id)
         if dst_record:
