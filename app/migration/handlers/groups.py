@@ -103,5 +103,5 @@ class ResGroupsHandler(DomainHandler):
             destination_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[model_name]
 
             # Create the record in the appropriate model/table
-            new_id = destination_model.create(data)
-            print(f"Created new group in {model_name} with ID {new_id}")
+            x_new_id = destination_model.create(data)
+            print(f"Created new group in {model_name} with ID {x_new_id}")

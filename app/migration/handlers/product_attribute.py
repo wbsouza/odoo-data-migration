@@ -80,6 +80,7 @@ class ProductAttributeHandler(DomainHandler):
             'data': {
                 'name': src_record.name,
                 'sequence': src_record.sequence,
+                'x_old_id': src_record.id,
                 # 'display_type': src_record.type,
             }
         }
@@ -109,15 +110,15 @@ class ProductAttributeHandler(DomainHandler):
                 if action == 'create':
                     dst_model = self.get_dst_model()
                     logging.info(f"Creating {self.get_dst_model_name()} \"{src_record.name}\" ...")
-                    new_id = dst_model.create(data)
+                    x_new_id = dst_model.create(data)
 
                 elif action == 'update':
                     logging.info(f"Updating attribute \"{src_record.name}\" ...")
                     dst_record = transformed_record['dst_record']
                     dst_record.write(data)
-                    new_id = dst_record.id
+                    x_new_id = dst_record.id
 
                 self.update_tracking_ids(
-                    new_id=new_id,
+                    x_new_id=x_new_id,
                     record=src_record
                 )

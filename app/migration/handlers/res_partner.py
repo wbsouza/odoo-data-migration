@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Any
 
 from .base import DomainHandler
 from ..core.odoo_connection import OdooConnectionProvider, DESTINATION
-from ..core.database import DBConnectionProvider, find_id_by_old_id, find_record_by_old_id
+from ..core.database import DBConnectionProvider, find_record_by_old_id
 
 
 
@@ -20,7 +20,7 @@ class ResPartnerHandler(DomainHandler):
 
 
     def find_dest_partner_by_old_id(self, src_record):
-        """Find partner in destination using old_id (more reliable than name-based lookup)"""
+        """Find partner in destination using x_old_id (more reliable than name-based lookup)"""
         conn = self._db_provider.get_connection(DESTINATION)
         dst_record = find_record_by_old_id(conn, 'res_partner', src_record.id)
         if dst_record:
@@ -80,6 +80,7 @@ class ResPartnerHandler(DomainHandler):
                 'mobile': src_record.mobile,
                 'is_company': src_record.is_company,
                 'company_id': src_record.company_id.id,
+                'x_old_id': src_record.id,
 
                 # Foreign key fields with lookup strategies
                 'country_id': self.find_dest_country_by_name(src_record.country_id),
@@ -107,15 +108,15 @@ class ResPartnerHandler(DomainHandler):
                 if action == 'create':
                     dst_model = self.get_dst_model()
                     logging.info(f"Creating {self.get_dst_model()} \"{src_record.name}\" ...")
-                    new_id = dst_model.create(data)
+                    x_new_id = dst_model.create(data)
 
                 elif action == 'update':
                     logging.info(f"Updating partner \"{src_record.name}\" ...")
                     dst_record = transformed_record['dst_record']
                     dst_record.write(data)
-                    new_id = dst_record.id
+                    x_new_id = dst_record.id
 
                 self.update_tracking_ids(
-                    new_id=new_id,
+                    x_new_id=x_new_id,
                     record=src_record
                 )

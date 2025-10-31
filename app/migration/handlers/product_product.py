@@ -51,6 +51,7 @@ class ProductProductHandler(DomainHandler):
                 'dst_record': existing_product,
                 'data': {
                     'default_code': src_record.default_code,
+                    'x_old_id': src_record.id,
                 }
             }]
         return result

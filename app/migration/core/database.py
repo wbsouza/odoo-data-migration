@@ -105,30 +105,30 @@ def find_id_by_field_name(conn: connection, table_name: str, field_name: str, fi
         return None
 
 
-def find_record_by_old_id(conn: connection, table_name: str, old_id: int):
+def find_record_by_old_id(conn: connection, table_name: str, x_old_id: int):
     """
-    Find a record in the destination database using old_id.
+    Find a record in the destination database using x_old_id.
     This is more reliable than name-based lookups which can have duplicates.
     
     :param conn: Database connection to destination
     :param table_name: Table name (e.g., 'product_template')
-    :param old_id: The source record ID to look for
+    :param x_old_id: The source record ID to look for
     :return: Dictionary with record data or None if not found
     """
-    return find_record_by_field_name(conn, table_name, 'old_id', old_id)
+    return find_record_by_field_name(conn, table_name, 'x_old_id', x_old_id)
 
 
-def find_id_by_old_id(conn: connection, table_name: str, old_id: int):
+def find_id_by_old_id(conn: connection, table_name: str, x_old_id: int):
     """
-    Find a record ID in the destination database using old_id.
+    Find a record ID in the destination database using x_old_id.
     Returns only the scalar ID value, compatible with OdooRPC operations.
     
     :param conn: Database connection to destination
     :param table_name: Table name (e.g., 'product_template')
-    :param old_id: The source record ID to look for
+    :param x_old_id: The source record ID to look for
     :return: Integer ID or None if not found
     """
-    return find_id_by_field_name(conn, table_name, 'old_id', old_id)
+    return find_id_by_field_name(conn, table_name, 'x_old_id', x_old_id)
 
 
 def find_id_by_name(conn: connection, table_name: str, name: str):
@@ -172,16 +172,16 @@ def create_tracking_fields(config: ConfigParser):
         'product_product'
     ]
 
-    # Create new_id in Odoo 11 (source)
+    # Create x_new_id in Odoo 11 (source)
     try:
         conn = connection_provider.get_connection('source')
         conn.autocommit = True
         for table in src_tables:
             try:
-                sql = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS new_id INTEGER"
+                sql = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS x_new_id INTEGER"
                 execute_sql(conn, sql)
             except Exception as e:
-                print(f"  ⚠️ Could not add new_id to {table}: {e}")
+                print(f"  ⚠️ Could not add x_new_id to {table}: {e}")
     except Exception as e:
         print(f"❌ Failed to connect to Odoo 11: {e}")
         return False
@@ -201,16 +201,16 @@ def create_tracking_fields(config: ConfigParser):
 
     ]
 
-    # Create old_id in Odoo 17 (destination)
+    # Create x_old_id in Odoo 17 (destination)
     try:
         dst_conn = connection_provider.get_connection('destination')
         dst_conn.autocommit = True
         for table in dst_tables:
             try:
-                sql = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS old_id INTEGER"
+                sql = f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS x_old_id INTEGER"
                 execute_sql(dst_conn, sql)
             except Exception as e:
-                print(f"  ⚠️ Could not add old_id to {table}: {e}")
+                print(f"  ⚠️ Could not add x_old_id to {table}: {e}")
     except Exception as e:
         print(f"❌ Failed to connect to Odoo 17: {e}")
         return False

@@ -84,7 +84,7 @@ class ProductCategoryHandler(DomainHandler):
                 'name': src_record.name,
                 'complete_name': src_record.complete_name,
                 # 'groups_id': [(6, 0, dst_group_ids)],
-                # 'old_id': src_record.id  # This field will be set via update_tracking_ids method
+                'x_old_id': src_record.id
             }
         }
 
@@ -111,15 +111,15 @@ class ProductCategoryHandler(DomainHandler):
                 if action == 'create':
                     dst_model = self.get_dst_model()
                     logging.info(f"Creating {self.get_dst_model_name()} \"{src_record.name}\" ...")
-                    new_id = dst_model.create(data)
+                    x_new_id = dst_model.create(data)
 
                 elif action == 'update':
                     logging.info(f"Updating category \"{src_record.name}\" ...")
                     dst_record = transformed_record['dst_record']
                     dst_record.write(data)
-                    new_id = dst_record.id
+                    x_new_id = dst_record.id
 
                 self.update_tracking_ids(
-                    new_id=new_id,
+                    x_new_id=x_new_id,
                     record=src_record
                 )

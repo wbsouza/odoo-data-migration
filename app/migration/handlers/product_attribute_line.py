@@ -207,7 +207,7 @@ class ProductAttributeLineHandler(DomainHandler):
             'data': {
                 'attribute_id': dst_attribute.id,
                 'product_tmpl_id': product_tmpl.id,
-                'old_id': src_record.id,  # This field will be set via update_tracking_ids method
+                'x_old_id': src_record.id,
                 'value_ids': [(6, 0, values_ids)],
             }
         }
@@ -229,15 +229,15 @@ class ProductAttributeLineHandler(DomainHandler):
             action = record['action']
             src_model = self._odoo_src.session.env[self.src_model_name]
 
-            if 'old_id' in data:
-                old_id = data.pop('old_id')
-                src_record = src_model.browse(old_id)
+            if 'x_old_id' in data:
+                x_old_id = data.pop('x_old_id')
+                src_record = src_model.browse(x_old_id)
                 dst_model = self._odoo_dst.session.env[self.get_dst_model_name()]
 
                 if action == 'create':
                     logging.info(f"Creating attribute line \"{src_record.product_tmpl_id.name, src_record.attribute_id.name}\" ...")
-                    new_id = dst_model.create(data)
-                    self.update_tracking_ids(new_id, src_record)
+                    x_new_id = dst_model.create(data)
+                    self.update_tracking_ids(x_new_id, src_record)
                     
                     # After creating attribute line, sync variant default codes
                     dst_template_id = data['product_tmpl_id']

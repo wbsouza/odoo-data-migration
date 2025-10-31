@@ -30,10 +30,10 @@ class ResUsersHandler(DomainHandler):
 
     def find_dest_partner_by_old_id(self, src_record):
         """
-        Find destination partner by old_id first, then fallback to name search.
+        Find destination partner by x_old_id first, then fallback to name search.
         Raises exception if not found by either method.
         """
-        # First try: lookup by old_id (from migration)
+        # First try: lookup by x_old_id (from migration)
         conn = self._db_provider.get_connection(DESTINATION)
         partner_id = find_id_by_old_id(conn, 'res_partner', src_record.partner_id.id)
         if partner_id is not None:
@@ -48,7 +48,7 @@ class ResUsersHandler(DomainHandler):
             
         # If neither method finds the partner, raise exception
         raise ValueError(f"Partner '{partner_name}' (source ID {src_record.partner_id.id}) "
-                         f"not found in destination by old_id or name. "
+                         f"not found in destination by x_old_id or name. "
                          f"Ensure res.partner migration completed successfully or partner exists in destination.")
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
@@ -70,6 +70,7 @@ class ResUsersHandler(DomainHandler):
                 'partner_id': dst_partner_id,  # Link to migrated partner
                 'company_id': src_record.company_id.id,
                 'lang': src_record.lang,
+                'x_old_id': src_record.id,
                 'tz': src_record.tz,
             }
         }]
@@ -86,20 +87,20 @@ class ResUsersHandler(DomainHandler):
             action = transformed_record['action']
             src_record = transformed_record['src_record']
             dst_record = transformed_record['dst_record']
-            new_id = None
+            x_new_id = None
 
             if action == 'create':
                 dst_model = self.get_dst_model(model_name)
                 logging.info(f"Creating user \"{src_record.name}\" ...")
-                new_id = dst_model.create(data)
+                x_new_id = dst_model.create(data)
 
             elif action == 'update':
                 logging.info(f"Updating user \"{src_record.name}\" ...")
                 dst_record.write(data)
-                new_id = dst_record.id
+                x_new_id = dst_record.id
 
-            if new_id is not None:
+            if x_new_id is not None:
                 self.update_tracking_ids(
-                    new_id=new_id,
+                    x_new_id=x_new_id,
                     record=src_record
                 )

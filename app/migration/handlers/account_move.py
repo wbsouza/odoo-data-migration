@@ -17,30 +17,30 @@ class AccountMoveHandler(DomainHandler):
     ):
         super().__init__(odoo_provider, db_provider, model_name)
 
-    def get_new_product_id_from_old_id(self, old_id: Optional[int]) -> Optional[int]:
-        if not old_id:
+    def get_new_product_id_from_old_id(self, x_old_id: Optional[int]) -> Optional[int]:
+        if not x_old_id:
             return None
         conn = self._db_provider.get_connection(DESTINATION)
-        return find_id_by_old_id(conn, 'product_product', old_id)
+        return find_id_by_old_id(conn, 'product_product', x_old_id)
 
-    # --- Mapping helpers (source old_id -> destination new id) ---
-    def get_new_user_id_from_old_id(self, old_id: Optional[int]) -> Optional[int]:
-        """Map source res.users.id to destination id via old_id."""
-        if not old_id:
+    # --- Mapping helpers (source x_old_id -> destination new id) ---
+    def get_new_user_id_from_old_id(self, x_old_id: Optional[int]) -> Optional[int]:
+        """Map source res.users.id to destination id via x_old_id."""
+        if not x_old_id:
             return None
         conn = self._db_provider.get_connection(DESTINATION)
-        return find_id_by_old_id(conn, 'res_users', old_id)
+        return find_id_by_old_id(conn, 'res_users', x_old_id)
 
-    def get_new_partner_id_from_old_id(self, old_id: Optional[int]) -> Optional[int]:
-        """Map source res.partner.id to destination id via old_id."""
-        if not old_id:
+    def get_new_partner_id_from_old_id(self, x_old_id: Optional[int]) -> Optional[int]:
+        """Map source res.partner.id to destination id via x_old_id."""
+        if not x_old_id:
             return None
         conn = self._db_provider.get_connection(DESTINATION)
-        return find_id_by_old_id(conn, 'res_partner', old_id)
+        return find_id_by_old_id(conn, 'res_partner', x_old_id)
 
-    def get_new_partner_shipping_id_from_old_id(self, old_id: Optional[int]) -> Optional[int]:
+    def get_new_partner_shipping_id_from_old_id(self, x_old_id: Optional[int]) -> Optional[int]:
         """Map shipping partner; if no separate shipping mapping, fallback to partner mapping."""
-        return self.get_new_partner_id_from_old_id(old_id)
+        return self.get_new_partner_id_from_old_id(x_old_id)
 
     def _get_invoice_journal(self, company):
         """Return a browsed sale journal for the given company record using destination env."""
@@ -175,7 +175,7 @@ class AccountMoveHandler(DomainHandler):
             'start_date': _safe_str(getattr(src_record, 'start_date', False)) or False,
             'end_date': _safe_str(getattr(src_record, 'end_date', False)) or False,
             'fiscal_position_id': fiscal_position_id,
-            'old_id': src_record.id,
+            'x_old_id': src_record.id,
         }
         # Optional textual fields
         invoice_data['ref'] = _safe_str(getattr(src_record, 'ref', False)) or False
@@ -213,21 +213,17 @@ class AccountMoveHandler(DomainHandler):
 
         invoice_lines_data = []
         # Prefer Odoo 11 journal entry lines linked to the invoice, with robust recordset detection
-        def _is_recordset(obj):
-            return obj is not None and not callable(obj) and (
-                hasattr(obj, 'id') or hasattr(obj, 'ids') or hasattr(obj, 'read')
-            )
+
 
         src_lines = []
-        move_ref = getattr(src_record, 'move_id', None)
-        if _is_recordset(move_ref) and getattr(move_ref, 'id', False):
+        old_invoice_id = src_record.id
+        if old_invoice_id:
             # Fetch account.move.line from SOURCE DB explicitly by move_id
             try:
                 src_conn = self._odoo_provider.get_odoo_connection(SOURCE)
-                aml_model = src_conn.get_model('account.move.line')
-                line_ids = aml_model.search([('move_id', '=', move_ref.id)], limit=0)
+                aml_model = src_conn.get_model('account.invoice.line')
+                line_ids = aml_model.search([('invoice_id', '=', old_invoice_id)], limit=0)
                 src_lines = [aml_model.browse(lid) for lid in line_ids] if line_ids else []
-                # Optional: filter by invoice_id if present on the line
                 filtered = []
                 for l in src_lines:
                     inv_field = getattr(l, 'invoice_id', None)
@@ -237,10 +233,6 @@ class AccountMoveHandler(DomainHandler):
             except Exception as e:
                 logging.warning(f"Failed to fetch account.move.line by move_id for invoice {getattr(src_record, 'id', None)}: {e}")
                 src_lines = []
-        else:
-            # Fallback to invoice_line_ids if available on account.invoice
-            ils = getattr(src_record, 'invoice_line_ids', None)
-            src_lines = ils if _is_recordset(ils) else []
 
         for line in src_lines:
             invoice_lines_data.append(self._get_invoice_line_data(invoice_head, company, partner, line))
@@ -269,8 +261,8 @@ class AccountMoveHandler(DomainHandler):
                     
                     # Create the move first without lines
                     move_data = data.copy()
-                    new_id = dst_model.create(move_data)
-                    logging.info(f"Created account move with ID {new_id}")
+                    x_new_id = dst_model.create(move_data)
+                    logging.info(f"Created account move with ID {x_new_id}")
                     
                 elif action == 'update':
                     logging.info(f"Updating account move '{src_record.number}'...")
