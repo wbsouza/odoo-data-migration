@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
 from .base import DomainHandler
 from ..core.odoo_connection import OdooConnectionProvider, SOURCE, DESTINATION
-from ..core.database import DBConnectionProvider, find_id_by_old_id
+from ..core.database import DBConnectionProvider, find_id_by_old_id, find_record_by_old_id
 
 class ProductProductHandler(DomainHandler):
 
@@ -41,19 +41,36 @@ class ProductProductHandler(DomainHandler):
 
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
-        result = []
-        existing_product = self.find_dst_product(src_record)
+        # We only update existing variants. Variants are auto-generated from
+        # product_template_attribute_line in Odoo 17. If not found, we skip.
+        conn = self._db_provider.get_connection(DESTINATION)
+        # Prefer lookup by x_old_id first
+        existing_product = find_record_by_old_id(conn, 'product_product', src_record.id)
+        dst_record = None
         if existing_product:
-            result = [{
-                'action': 'update' if existing_product else 'create',
-                'dst_model': 'product.product',
-                'src_record': src_record,
-                'dst_record': existing_product,
-                'data': {
-                    'default_code': src_record.default_code,
-                    'x_old_id': src_record.id,
-                }
-            }]
+            dst_record = self.get_dst_model('product.product').browse(existing_product['id'])
+        else:
+            # Fallback: try to resolve by template + default_code
+            dst_record = self.find_dst_product(src_record)
+
+        if not dst_record:
+            logging.warning(
+                f"Skipping product variant old_id={src_record.id} (template='{src_record.product_tmpl_id.name}'): "
+                f"no matching destination variant found."
+            )
+            return []
+
+        result = [{
+            'action': 'update',
+            'model': 'product.product',
+            'src_record': src_record,
+            'dst_record': dst_record,
+            'data': {
+                'default_code': src_record.default_code,
+                'x_old_id': src_record.id,
+            }
+        }]
+
         return result
 
     def save_into_destination(self, transformed_records: List[Dict]):
@@ -61,12 +78,10 @@ class ProductProductHandler(DomainHandler):
         Save the transformed records in the destination system.
         This handles creating/updating product.product in the destination Odoo 17.
         """
-        for record in transformed_records:
-            data = record['data']
-            action = record['action']
-            if 'src_record' in data:
-                if action == 'update':
-                    src_record = data['src_record']
-                    dst_record = data['dst_record']
-                    dst_record.write(data)
-                    self.update_tracking_ids(dst_record.id, src_record)
+        # Delegate to generic create/update+tracking routine
+        self.save_records(
+            transformed_records=transformed_records,
+            default_model_name=self.get_dst_model_name(),
+            entity_label='product',
+            name_field='name',
+        )

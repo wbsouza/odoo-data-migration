@@ -81,26 +81,10 @@ class ResUsersHandler(DomainHandler):
         Save the transformed records in the destination system.
         This handles creating res.users in the destination Odoo (Odoo 17).
         """
-        for transformed_record in transformed_records:
-            model_name = transformed_record['model']
-            data = transformed_record['data']
-            action = transformed_record['action']
-            src_record = transformed_record['src_record']
-            dst_record = transformed_record['dst_record']
-            x_new_id = None
-
-            if action == 'create':
-                dst_model = self.get_dst_model(model_name)
-                logging.info(f"Creating user \"{src_record.name}\" ...")
-                x_new_id = dst_model.create(data)
-
-            elif action == 'update':
-                logging.info(f"Updating user \"{src_record.name}\" ...")
-                dst_record.write(data)
-                x_new_id = dst_record.id
-
-            if x_new_id is not None:
-                self.update_tracking_ids(
-                    x_new_id=x_new_id,
-                    record=src_record
-                )
+        # Delegate to generic create/update+tracking routine
+        self.save_records(
+            transformed_records=transformed_records,
+            default_model_name=self.get_dst_model_name(),
+            entity_label='user',
+            name_field='name',
+        )

@@ -91,15 +91,85 @@ class DomainHandler:
         """
         raise NotImplementedError("Subclasses should implement this method.")
 
+    def save_records(
+        self,
+        transformed_records: List[Dict],
+        default_model_name: str = None,
+        entity_label: str = 'record',
+        name_field: str = 'name',
+    ) -> None:
+        """
+        Generic create/update + tracking routine to DRY up handler implementations.
+
+        - Uses `model` from each transformed record, falling back to `default_model_name`
+          or this handler's destination model name.
+        - Logs create/update with a readable label resolved from `name_field` on src_record.
+        - Updates tracking ids via `update_tracking_ids` when a record is created/updated.
+        - Catches exceptions per-record and continues.
+        """
+        for tr in transformed_records:
+            model_name = tr.get('model', default_model_name or self.get_dst_model_name())
+            data = tr['data']
+            action = tr['action']
+            src_record = tr['src_record']
+            dst_record = tr.get('dst_record')
+            x_new_id = None
+
+            # Resolve a user-friendly label for logging
+            try:
+                label = getattr(src_record, name_field, None)
+                if label is None or label == '':
+                    label = getattr(src_record, 'id', 'unknown')
+            except Exception:
+                label = getattr(src_record, 'id', 'unknown')
+
+            try:
+                if action == 'create':
+                    dst_model = self.get_dst_model(model_name)
+                    logging.info(f"Creating {entity_label} \"{label}\" ...")
+                    x_new_id = dst_model.create(data)
+
+                elif action == 'update' and dst_record:
+                    logging.info(f"Updating {entity_label} \"{label}\" ...")
+                    dst_record.write(data)
+                    x_new_id = dst_record.id
+
+                if x_new_id is not None:
+                    self.update_tracking_ids(
+                        x_new_id=x_new_id,
+                        record=src_record
+                    )
+            except Exception as e:
+                logging.error(f"Error processing {entity_label} '{label}': {str(e)}")
+                # Continue with next record instead of failing completely
+                continue
+
     def _update_tracking_id(self, connection_type, model_name, record_id, field_name, field_value):
         try:
             conn = self._db_provider.get_connection(connection_type)
             conn.autocommit = True
-            cursor = conn.cursor()
             table_name = model_name.replace('.', '_')
-            sql = f'UPDATE {table_name} SET {field_name} = {field_value} WHERE id={record_id}'
-            cursor.execute(sql)
-            cursor.close()
+
+            # Check column existence before updating to avoid noisy errors
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = %s AND column_name = %s
+                    LIMIT 1
+                    """,
+                    (table_name, field_name)
+                )
+                exists = cur.fetchone() is not None
+
+            if not exists:
+                _logger.debug(f"Skipping tracking update: column '{field_name}' not found on table '{table_name}'")
+                return False
+
+            with conn.cursor() as cursor:
+                sql = f'UPDATE {table_name} SET {field_name} = %s WHERE id = %s'
+                cursor.execute(sql, (field_value, record_id))
             return True
         except Exception as ex:
             _logger.error(f"Failed to update tracking id: {ex}")
@@ -117,7 +187,7 @@ class DomainHandler:
             self._update_tracking_id(
                 connection_type=DESTINATION,
                 model_name=self.get_dst_model_name(),
-                field_name='X_old_id',
+                field_name='x_old_id',
                 field_value=record.id,
                 record_id=x_new_id
             )

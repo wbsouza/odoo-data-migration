@@ -52,8 +52,18 @@ class AccountMoveHandler(DomainHandler):
 
 
     def _get_product_taxes(self, fiscal_position_id: Optional[int], company, partner, product):
-        """Return taxes for product limited to company; map with fiscal position if provided."""
-        taxes_by_company = product.taxes_id.filtered(lambda r: r.company_id.id == company.id)
+        """Return taxes for product limited to company; map with fiscal position if provided.
+
+        Note: Avoid using recordset.filtered(lambda ...) over RPC. Passing a Python function
+        is not JSON-serializable. Instead, filter via a search on account.tax.
+        """
+        tax_ids = getattr(product.taxes_id, 'ids', []) if hasattr(product, 'taxes_id') else []
+        if tax_ids:
+            tax_model = self.get_dst_model('account.tax')
+            ids = tax_model.search([('id', 'in', tax_ids), ('company_id', '=', company.id)], limit=0)
+            taxes_by_company = tax_model.browse(ids)
+        else:
+            taxes_by_company = self.get_dst_model('account.tax').browse([])
         if fiscal_position_id:
             fpos = self.get_dst_model('account.fiscal.position').browse(fiscal_position_id)
             return fpos.map_tax(taxes_by_company, product=product, partner=partner)
@@ -207,7 +217,7 @@ class AccountMoveHandler(DomainHandler):
             'action': 'update' if existing_record else 'create',
             'model': 'account.move',
             'src_record': src_record,
-            'dst_record': existing_record,
+            'dst_record': self.get_dst_model('account.move').browse(existing_record['id']) if existing_record else None,
             'data': invoice_head
         }
 
@@ -254,39 +264,28 @@ class AccountMoveHandler(DomainHandler):
             data = transformed_record['data']
             action = transformed_record['action']
             src_record = transformed_record['src_record']
+            dst_record = transformed_record.get('dst_record')
+            x_new_id = None
 
             try:
                 if action == 'create':
-                    logging.info(f"Creating account move '{src_record.number}'...")
-                    
-                    # Create the move first without lines
-                    move_data = data.copy()
-                    x_new_id = dst_model.create(move_data)
+                    logging.info(f"Creating account move '{getattr(src_record, 'number', src_record.id)}'...")
+                    x_new_id = dst_model.create(data)
                     logging.info(f"Created account move with ID {x_new_id}")
-                    
-                elif action == 'update':
-                    logging.info(f"Updating account move '{src_record.number}'...")
-                    dst_record = transformed_record['dst_record']
-                    move_data = data.copy()
-                    move_data.pop('invoice_line_ids')
-                    dst_record.write(move_data)
+                elif action == 'update' and dst_record:
+                    logging.info(f"Updating account move '{getattr(src_record, 'number', src_record.id)}'...")
+                    dst_record.write(data)
+                    x_new_id = dst_record.id
                     logging.info(f"Updated account move with ID {dst_record.id}")
 
-                    dst_move_line_model = self.get_dst_model('account.move.line')
-
-                    for line in data['invoice_line_ids']:
-                        line_data = line.copy()
-                        line_data['move_id'] = dst_record.id
-
-                        # check if it already exists (by product_id, quantity, discount, etc)
-                        # if does not exist, create it otherwise update it
-                        if not self._move_line_exists(line_data):
-                            dst_move_line_model.create(line_data)
-                        else:
-                            dst_move_line_model.write(line_data)
-
 
                     
+                if x_new_id is not None:
+                    self.update_tracking_ids(
+                        x_new_id=x_new_id,
+                        record=src_record
+                    )
+
             except Exception as e:
                 logging.error(f"Error processing account move '{src_record.name}': {str(e)}")
                 # Continue with next record instead of failing completely
