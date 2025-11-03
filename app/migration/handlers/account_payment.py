@@ -65,6 +65,9 @@ class AccountPaymentHandler(DomainHandler):
 
         # Check if record already exists using x_old_id
         existing_record = find_record_by_old_id(conn, 'account_payment', src_record.id)
+        browsed_dst_record = None
+        if existing_record:
+            browsed_dst_record = self.get_dst_model('account.payment').browse(existing_record['id'])
         
         # Get destination company_id from the Odoo connection
         dst_odoo = self._odoo_provider.get_odoo_connection(DESTINATION)
@@ -79,6 +82,8 @@ class AccountPaymentHandler(DomainHandler):
             'payment_method_id': payment_method_id,
             'company_id': company_id,  # Use destination company
             'x_old_id': src_record.id,
+            # Keep payment in draft; posting/reconciliation will be a later step
+            'state': 'draft',
         }
 
         # Add currency if available
@@ -93,20 +98,35 @@ class AccountPaymentHandler(DomainHandler):
         if hasattr(src_record, 'date') and src_record.date:
             data['date'] = src_record.date
         
-        if hasattr(src_record, 'ref') and src_record.ref:
-            data['ref'] = src_record.ref
+        base_ref = getattr(src_record, 'ref', None)
+        # Mark source invoice IDs in ref for later reconciliation
+        src_inv_ids = []
+        try:
+            invs = getattr(src_record, 'invoice_ids', [])
+            # invoice_ids might be a recordset; try to iterate and extract .id
+            for inv in invs or []:
+                inv_id = getattr(inv, 'id', None)
+                if inv_id:
+                    src_inv_ids.append(inv_id)
+        except Exception:
+            src_inv_ids = []
 
-        # Try to link to related account move if it exists
-        if hasattr(src_record, 'move_name') and src_record.move_name:
-            move_id = find_id_by_old_id(conn, 'account_move', src_record.move_name)
-            if move_id:
-                data['move_id'] = move_id
+        marker = ''
+        if src_inv_ids:
+            marker = f" [SRC_INV: {','.join(str(i) for i in src_inv_ids)}]"
+        if base_ref:
+            data['ref'] = f"{base_ref}{marker}"
+        elif marker:
+            data['ref'] = marker.strip()
+
+        # Do NOT link to account.move yet; invoices are draft and will change.
+        # Reconciliation will occur in a later pass using the [SRC_INV: ids] marker above.
 
         transformed_record = {
             'action': 'update' if existing_record else 'create',
             'model': 'account.payment',
             'src_record': src_record,
-            'dst_record': existing_record,
+            'dst_record': browsed_dst_record,
             'data': data
         }
 
@@ -117,26 +137,9 @@ class AccountPaymentHandler(DomainHandler):
         Save the transformed records in the destination system.
         This handles creating/updating account.payment in the destination Odoo.
         """
-        dst_model = self.get_dst_model('account.payment')
-
-        for transformed_record in transformed_records:
-            data = transformed_record['data']
-            action = transformed_record['action']
-            src_record = transformed_record['src_record']
-
-            try:
-                if action == 'create':
-                    logging.info(f"Creating account payment for amount {data.get('amount', 0)}...")
-                    x_new_id = dst_model.create(data)
-                    logging.info(f"Created account payment with ID {x_new_id}")
-                    
-                elif action == 'update':
-                    logging.info(f"Updating account payment {src_record.id}...")
-                    dst_record = transformed_record['dst_record']
-                    dst_record.write(data)
-                    logging.info(f"Updated account payment with ID {dst_record.id}")
-                    
-            except Exception as e:
-                logging.error(f"Error processing account payment {src_record.id}: {str(e)}")
-                # Continue with next record instead of failing completely
-                continue
+        self.save_records(
+            transformed_records=transformed_records,
+            default_model_name='account.payment',
+            entity_label='payment',
+            name_field='ref',
+        )

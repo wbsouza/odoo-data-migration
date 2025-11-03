@@ -49,7 +49,7 @@ class Migration:
             'res.partner.parent',  # Second phase for parent_id relationships
             'res.users',
             'account.move',
-            # 'account.payment',
+            'account.payment',
         ]
 
         self.models_handlers = {
