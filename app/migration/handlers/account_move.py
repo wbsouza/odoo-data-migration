@@ -42,12 +42,12 @@ class AccountMoveHandler(DomainHandler):
         """Map shipping partner; if no separate shipping mapping, fallback to partner mapping."""
         return self.get_new_partner_id_from_old_id(x_old_id)
 
-    def _get_invoice_journal(self, company):
-        """Return a browsed sale journal for the given company record using destination env."""
+    def _get_invoice_journal(self, company, journal_type='sale'):
+        """Return a browsed journal by type (sale/purchase) for the given company using destination env."""
         journal_model = self.get_dst_model('account.journal')
-        ids = journal_model.search([('type', '=', 'sale'), ('company_id', '=', company.id)], limit=1)
+        ids = journal_model.search([('type', '=', journal_type), ('company_id', '=', company.id)], limit=1)
         if not ids:
-            raise Exception('Please define a sale journal for the company "%s".' % (company.name or ''))
+            raise Exception('Please define a %s journal for the company "%s".' % (journal_type, company.name or ''))
         return journal_model.browse(ids[0])
 
 
@@ -76,7 +76,7 @@ class AccountMoveHandler(DomainHandler):
         product_id = self.get_new_product_id_from_old_id(old_prod_id)
         product = self.get_dst_model('product.product').browse(product_id) if product_id else None
 
-        # Income account, optionally mapped by fiscal position
+        # Income/Expense account, optionally mapped by fiscal position
         account_id = None
         if product:
             account = product.property_account_income_id or product.categ_id.property_account_income_categ_id
@@ -88,6 +88,16 @@ class AccountMoveHandler(DomainHandler):
                     account_id = mapped.id if mapped else account.id
                 else:
                     account_id = account.id
+
+        # Fallback: pick a default income/expense account if still missing
+        if not account_id:
+            acc_model = self.get_dst_model('account.account')
+            mt = invoice_head.get('move_type')
+            if mt in ('out_invoice', 'out_refund', 'out_receipt'):
+                acc_ids = acc_model.search([('account_type', '=', 'income'), ('company_id', '=', company.id)], limit=1)
+            else:
+                acc_ids = acc_model.search([('account_type', '=', 'expense'), ('company_id', '=', company.id)], limit=1)
+            account_id = acc_ids[0] if acc_ids else False
 
         # Derive price_unit and quantity
         price_unit = getattr(line, 'price_unit', None)
@@ -112,8 +122,9 @@ class AccountMoveHandler(DomainHandler):
         # Optional discounts if present on source line
         if hasattr(line, 'discount'):
             result['discount'] = line.discount
-        if hasattr(line, 'discount_type'):
-            result['discount_type'] = line.discount_type
+        # TODO: handle discount_type
+        # if line.discount_type:
+        #     result['discount_type'] = line.discount_type
 
         return result
 
@@ -131,8 +142,12 @@ class AccountMoveHandler(DomainHandler):
         # Currency preference: partner then company
         currency = partner.currency_id or company.currency_id
 
-        # Journal (sale)
-        journal = self._get_invoice_journal(company)
+        # Move type from source (Odoo 11: 'type' field)
+        move_type = getattr(src_record, 'type', 'out_invoice') or 'out_invoice'
+
+        # Journal by type
+        journal_type = 'sale' if move_type in ('out_invoice', 'out_refund', 'out_receipt') else 'purchase'
+        journal = self._get_invoice_journal(company, journal_type)
 
         # Fiscal position not computed here (no self.env compute); set False
         fiscal_position_id = False
@@ -171,7 +186,7 @@ class AccountMoveHandler(DomainHandler):
             return val if isinstance(val, (str, int, float)) else False
 
         invoice_data = {
-            'move_type': 'out_invoice',
+            'move_type': move_type,
             'company_id': company.id,
             'partner_id': partner.id,
             'partner_shipping_id': partner_shipping.id,
@@ -217,7 +232,8 @@ class AccountMoveHandler(DomainHandler):
             'action': 'update' if existing_record else 'create',
             'model': 'account.move',
             'src_record': src_record,
-            'dst_record': self.get_dst_model('account.move').browse(existing_record['id']) if existing_record else None,
+            # Defer browsing to save step to avoid RPC read errors at transform time
+            'dst_record': existing_record if existing_record else None,
             'data': invoice_head
         }
 
@@ -247,7 +263,8 @@ class AccountMoveHandler(DomainHandler):
         for line in src_lines:
             invoice_lines_data.append(self._get_invoice_line_data(invoice_head, company, partner, line))
 
-        invoice_data['invoice_line_ids'] = [(0, 0, line) for line in invoice_lines_data]
+        # Important: put lines inside the payload under 'data', so create/write receives them
+        invoice_data['data']['invoice_line_ids'] = [(0, 0, line) for line in invoice_lines_data]
 
 
         return [invoice_data]
@@ -273,6 +290,9 @@ class AccountMoveHandler(DomainHandler):
                     x_new_id = dst_model.create(data)
                     logging.info(f"Created account move with ID {x_new_id}")
                 elif action == 'update' and dst_record:
+                    # If dst_record came from DB (dict), browse it now
+                    if not hasattr(dst_record, 'write'):
+                        dst_record = dst_model.browse(dst_record['id'])
                     logging.info(f"Updating account move '{getattr(src_record, 'number', src_record.id)}'...")
                     dst_record.write(data)
                     x_new_id = dst_record.id

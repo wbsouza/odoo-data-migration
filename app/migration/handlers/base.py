@@ -118,7 +118,8 @@ class DomainHandler:
             # Resolve a user-friendly label for logging
             try:
                 label = getattr(src_record, name_field, None)
-                if label is None or label == '':
+                # Discard callables or empty labels
+                if callable(label) or label is None or label == '':
                     label = getattr(src_record, 'id', 'unknown')
             except Exception:
                 label = getattr(src_record, 'id', 'unknown')

@@ -1,4 +1,5 @@
 import logging
+from datetime import date as _date
 from typing import Dict, List, Optional, Any
 
 from .base import DomainHandler
@@ -71,17 +72,46 @@ class AccountPaymentHandler(DomainHandler):
         
         # Get destination company_id from the Odoo connection
         dst_odoo = self._odoo_provider.get_odoo_connection(DESTINATION)
-        company_id = dst_odoo.company_id
-        
+        company_id = dst_odoo.get_company_id()
+
+        # Helpers to sanitize values before RPC
+        def _safe_str(val, default=False):
+            return val if isinstance(val, (str, int, float)) else default
+
+        def _to_date_str(val):
+            if val is None:
+                return False
+            if callable(val):
+                return False
+            if isinstance(val, str):
+                s = val.strip()
+                if len(s) == 10 and s[4] == '-' and s[7] == '-':
+                    return s
+                return False
+            try:
+                return val.strftime('%Y-%m-%d')
+            except Exception:
+                try:
+                    s = val.isoformat()
+                    if len(s) >= 10 and s[4] == '-' and s[7] == '-':
+                        return s[:10]
+                except Exception:
+                    pass
+            return False
+
+        partner_type = _safe_str(getattr(src_record, 'partner_type', None), default='customer')
+        payment_type = _safe_str(getattr(src_record, 'payment_type', None), default='inbound')
+
         data = {
-            'amount': src_record.amount or 0.0,
+            'amount': float(getattr(src_record, 'amount', 0.0) or 0.0),
             'partner_id': partner_id,
-            'partner_type': getattr(src_record, 'partner_type', 'customer'),
-            'payment_type': getattr(src_record, 'payment_type', 'inbound'),
+            'partner_type': partner_type,
+            'payment_type': payment_type,
             'journal_id': journal_id,
-            'payment_method_id': payment_method_id,
+            # Odoo 17 typically uses payment_method_line_id; omit method field for now to avoid RPC issues
+            # 'payment_method_id': payment_method_id,
             'company_id': company_id,  # Use destination company
-            'x_old_id': src_record.id,
+            'x_old_id': getattr(src_record, 'id', None),
             # Keep payment in draft; posting/reconciliation will be a later step
             'state': 'draft',
         }
@@ -96,13 +126,18 @@ class AccountPaymentHandler(DomainHandler):
 
         # Add optional fields
         if hasattr(src_record, 'date') and src_record.date:
-            data['date'] = src_record.date
+            data['date'] = _to_date_str(src_record.date)
+        # Ensure mandatory date is set (fallback to today)
+        if not data.get('date'):
+            data['date'] = _date.today().isoformat()
         
-        base_ref = getattr(src_record, 'ref', None)
+        base_ref = _safe_str(getattr(src_record, 'ref', None), default=False)
         # Mark source invoice IDs in ref for later reconciliation
         src_inv_ids = []
         try:
             invs = getattr(src_record, 'invoice_ids', [])
+            if callable(invs):
+                invs = []
             # invoice_ids might be a recordset; try to iterate and extract .id
             for inv in invs or []:
                 inv_id = getattr(inv, 'id', None)
