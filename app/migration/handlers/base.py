@@ -126,14 +126,24 @@ class DomainHandler:
 
             try:
                 if action == 'create':
+                    # Pure JSON-RPC: create returns the new ID (int)
                     dst_model = self.get_dst_model(model_name)
                     logging.info(f"Creating {entity_label} \"{label}\" ...")
                     x_new_id = dst_model.create(data)
 
                 elif action == 'update' and dst_record:
+                    # Pure JSON-RPC: avoid browse()/recordsets; write by ids only
                     logging.info(f"Updating {entity_label} \"{label}\" ...")
-                    dst_record.write(data)
-                    x_new_id = dst_record.id
+                    dst_model = self.get_dst_model(model_name)
+                    try:
+                        dst_id = dst_record['id'] if isinstance(dst_record, dict) else getattr(dst_record, 'id', None)
+                    except Exception:
+                        dst_id = None
+                    if not dst_id:
+                        raise ValueError("Missing destination id for update")
+                    # RPC write signature: write([ids], vals) -> True
+                    dst_model.write([dst_id], data)
+                    x_new_id = dst_id
 
                 if x_new_id is not None:
                     self.update_tracking_ids(

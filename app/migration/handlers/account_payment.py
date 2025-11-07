@@ -108,13 +108,55 @@ class AccountPaymentHandler(DomainHandler):
             'partner_type': partner_type,
             'payment_type': payment_type,
             'journal_id': journal_id,
-            # Odoo 17 typically uses payment_method_line_id; omit method field for now to avoid RPC issues
-            # 'payment_method_id': payment_method_id,
+            # Odoo 17 requires payment_method_line_id to be set for the selected journal/direction
             'company_id': company_id,  # Use destination company
             'x_old_id': getattr(src_record, 'id', None),
             # Keep payment in draft; posting/reconciliation will be a later step
             'state': 'draft',
         }
+
+        # Resolve payment_method_line_id from the journal and payment direction (inbound/outbound)
+        # Try to match the source payment method by name; otherwise pick the first available line.
+        try:
+            if journal_id:
+                journal = self.get_dst_model('account.journal').browse(journal_id)
+                method_name = None
+                try:
+                    method_name = getattr(getattr(src_record, 'payment_method_id', None), 'name', None)
+                except Exception:
+                    method_name = None
+
+                if payment_type == 'inbound':
+                    lines = getattr(journal, 'inbound_payment_method_line_ids', []) or []
+                elif payment_type == 'outbound':
+                    lines = getattr(journal, 'outbound_payment_method_line_ids', []) or []
+                else:
+                    # For transfers, fall back to outbound then inbound
+                    lines = getattr(journal, 'outbound_payment_method_line_ids', []) or getattr(journal, 'inbound_payment_method_line_ids', []) or []
+
+                chosen_line_id = None
+                if method_name and lines:
+                    for line in lines:
+                        try:
+                            pm_name = getattr(getattr(line, 'payment_method_id', None), 'name', None)
+                            if pm_name == method_name or getattr(line, 'name', None) == method_name:
+                                chosen_line_id = line.id
+                                break
+                        except Exception:
+                            continue
+                if not chosen_line_id and lines:
+                    # Default to the first available method line for the journal/direction
+                    first = lines[0]
+                    chosen_line_id = getattr(first, 'id', first if isinstance(first, int) else None)
+
+                if chosen_line_id:
+                    data['payment_method_line_id'] = chosen_line_id
+                else:
+                    logging.warning(f"No payment method line available for journal {journal_id} and payment_type {payment_type} (payment {getattr(src_record, 'id', None)})")
+            else:
+                logging.warning(f"Cannot resolve payment_method_line_id: missing journal for payment {getattr(src_record, 'id', None)}")
+        except Exception as e:
+            logging.warning(f"Failed to resolve payment_method_line_id for payment {getattr(src_record, 'id', None)}: {e}")
 
         # Add currency if available
         if hasattr(src_record, 'currency_id') and src_record.currency_id:

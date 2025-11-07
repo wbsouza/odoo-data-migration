@@ -113,10 +113,12 @@ class AccountMoveHandler(DomainHandler):
             'account_id': account_id,
             'name': getattr(line, 'name', '/') or '/',
             'product_id': product.id if product else False,
-            'uom_id': product.uom_id.id if product and product.uom_id else False,
+            # In Odoo 17 invoice line, the unit of measure field is product_uom_id
+            'product_uom_id': product.uom_id.id if product and product.uom_id else False,
             'price_unit': price_unit,
             'quantity': quantity,
             'tax_ids': [(6, 0, tax_ids)] if tax_ids else False,
+            'x_old_id': line.id,
         }
 
         # Optional discounts if present on source line
@@ -260,11 +262,29 @@ class AccountMoveHandler(DomainHandler):
                 logging.warning(f"Failed to fetch account.move.line by move_id for invoice {getattr(src_record, 'id', None)}: {e}")
                 src_lines = []
 
-        for line in src_lines:
-            invoice_lines_data.append(self._get_invoice_line_data(invoice_head, company, partner, line))
+        for src_line in src_lines:
+            vals = self._get_invoice_line_data(invoice_head, company, partner, src_line)
+            invoice_lines_data.append(vals)
+
+        if src_line.id <= 11:
+            print("debug it")
 
         # Important: put lines inside the payload under 'data', so create/write receives them
-        invoice_data['data']['invoice_line_ids'] = [(0, 0, line) for line in invoice_lines_data]
+        if invoice_data['action'] == 'create':
+            invoice_data['data']['invoice_line_ids'] = [(0, 0, vals) for vals in invoice_lines_data]
+        elif invoice_data['action'] == 'update':
+            # Build update commands using DB mapping: src_line.id -> dst account_move_line.id
+            conn_dst = self._db_provider.get_connection(DESTINATION)
+            commands = []
+            for src_line in src_lines:
+                vals = self._get_invoice_line_data(invoice_head, company, partner, src_line)
+                dst_line_id = find_id_by_old_id(conn_dst, 'account_move_line', getattr(src_line, 'id', None))
+                if dst_line_id:
+                    commands.append((1, dst_line_id, vals))  # update in place
+                else:
+                    commands.append((0, 0, vals))  # create if mapping not found
+            invoice_data['data']['invoice_line_ids'] = commands
+
 
 
         return [invoice_data]
@@ -278,6 +298,8 @@ class AccountMoveHandler(DomainHandler):
         dst_model = self.get_dst_model('account.move')
 
         for transformed_record in transformed_records:
+            if transformed_record['src_record'].invoice_line_ids['ids'][0] <= 11:
+                print("debug it")
             data = transformed_record['data']
             action = transformed_record['action']
             src_record = transformed_record['src_record']
@@ -290,16 +312,12 @@ class AccountMoveHandler(DomainHandler):
                     x_new_id = dst_model.create(data)
                     logging.info(f"Created account move with ID {x_new_id}")
                 elif action == 'update' and dst_record:
-                    # If dst_record came from DB (dict), browse it now
-                    if not hasattr(dst_record, 'write'):
-                        dst_record = dst_model.browse(dst_record['id'])
+                    # Pure JSON-RPC: avoid browse()/recordsets; write by ids only
                     logging.info(f"Updating account move '{getattr(src_record, 'number', src_record.id)}'...")
-                    dst_record.write(data)
-                    x_new_id = dst_record.id
-                    logging.info(f"Updated account move with ID {dst_record.id}")
+                    dst_model.write([dst_record['id']], data)
+                    x_new_id = dst_record['id']
+                    logging.info(f"Updated account move with ID {dst_record['id']}")
 
-
-                    
                 if x_new_id is not None:
                     self.update_tracking_ids(
                         x_new_id=x_new_id,
@@ -310,4 +328,5 @@ class AccountMoveHandler(DomainHandler):
                 logging.error(f"Error processing account move '{src_record.name}': {str(e)}")
                 # Continue with next record instead of failing completely
                 continue
+
 
