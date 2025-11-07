@@ -4,7 +4,13 @@ from typing import Dict, List, Optional, Any
 from .base import DomainHandler
 
 from ..core.odoo_connection import OdooConnectionProvider, DESTINATION, SOURCE
-from ..core.database import DBConnectionProvider, find_id_by_old_id, find_record_by_old_id
+from ..core.database import (
+    DBConnectionProvider,
+    find_id_by_old_id,
+    find_record_by_old_id,
+    find_invoice_by_field_name,
+    find_invoice_id_by_old_id,
+)
 
 
 class AccountMoveHandler(DomainHandler):
@@ -228,7 +234,9 @@ class AccountMoveHandler(DomainHandler):
 
         # Check if record already exists using old_id (via DB connection)
         conn = self._db_provider.get_connection(DESTINATION)
-        existing_record = find_record_by_old_id(conn, 'account_move', src_record.id)
+        # Use optimized ID-only lookup to avoid SELECT * on account_move
+        _dst_id = find_invoice_id_by_old_id(conn, src_record.id)
+        existing_record = {'id': _dst_id} if _dst_id else None
 
         invoice_data = {
             'action': 'update' if existing_record else 'create',

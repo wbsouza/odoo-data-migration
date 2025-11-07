@@ -93,6 +93,14 @@ def find_record_by_field_name(conn: connection, table_name: str, field_name: str
         return None
 
 
+def find_invoice_id_by_old_id(conn: connection, x_old_id: int):
+    """
+    Optimized helper: fetch only the id from account_move by x_old_id.
+    :return: int id or None
+    """
+    row = find_invoice_by_field_name(conn, 'x_old_id', x_old_id, ['id'])
+    return row['id'] if row else None
+
 def find_id_by_field_name(conn: connection, table_name: str, field_name: str, field_value: Any):
     try:
         if isinstance(field_value, str):
@@ -102,6 +110,47 @@ def find_id_by_field_name(conn: connection, table_name: str, field_name: str, fi
         return rows[0]['id'] if rows else None
     except Exception as e:
         _logger.warning(f"Error finding ID by {field_name} = {field_value} in {table_name}: {e}")
+        return None
+
+
+def find_invoice_by_field_name(conn: connection, field_name: str, field_value: Any, fields: list[str]):
+    """
+    Fetch a single account_move row selecting only the specified columns.
+
+    This is a specialized/optimized version for invoices/moves to avoid SELECT *.
+
+    :param conn: psycopg2 connection
+    :param field_name: filter column (e.g., 'x_old_id')
+    :param field_value: value to match
+    :param fields: list of column names to return (e.g., ['id','name','state'])
+    :return: dict with requested columns or None
+    """
+    try:
+        # default to id only if not provided
+        if not fields:
+            fields = ['id']
+
+        # very simple column sanitization to avoid SQL injection via identifiers
+        safe_cols = []
+        for col in fields:
+            col_str = str(col)
+            if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', col_str):
+                raise ValueError(f"Unsafe column name: {col_str}")
+            safe_cols.append(col_str)
+
+        # sanitize field_name as identifier
+        if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', str(field_name)):
+            raise ValueError(f"Unsafe field name: {field_name}")
+
+        # quote strings, keep numerics as-is (align with existing helpers' style)
+        value_sql = f"'{field_value}'" if isinstance(field_value, str) else str(field_value)
+
+        cols_sql = ', '.join(safe_cols)
+        sql = f"SELECT {cols_sql} FROM account_move WHERE {field_name} = {value_sql} LIMIT 1"
+        rows = fetch_sql(conn, sql)
+        return rows[0] if rows else None
+    except Exception as e:
+        _logger.warning(f"Error finding invoice by {field_name} = {field_value}: {e}")
         return None
 
 
