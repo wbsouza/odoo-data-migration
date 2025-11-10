@@ -97,7 +97,8 @@ class Migration:
                 domain = None
 
                 if model_name == 'account.move':
-                    domain = [('type', '=', 'out_invoice')]
+                    # Odoo 11 account.invoice: exclude draft invoices
+                    domain = [('type', '=', 'out_invoice'), ('state', '!=', 'draft')]
 
                 records = handler.fetch_items(
                     odoo=src_odoo,
