@@ -51,9 +51,9 @@ class AccountPaymentHandler(DomainHandler):
 
         # Use name-based lookup for journal
         journal_id = None
-        if hasattr(src_record, 'journal_id') and src_record.journal_id:
+        if src_record.journal_id:
             journal_id = self.find_journal_by_name(src_record.journal_id.name)
-        elif hasattr(src_record, 'destination_journal_id') and src_record.destination_journal_id:
+        elif src_record.destination_journal_id:
             journal_id = self.find_journal_by_name(src_record.destination_journal_id.name)
         
         if not journal_id:
@@ -61,7 +61,7 @@ class AccountPaymentHandler(DomainHandler):
 
         # Use name-based lookup for payment method
         payment_method_id = None
-        if hasattr(src_record, 'payment_method_id') and src_record.payment_method_id:
+        if src_record.payment_method_id:
             payment_method_id = self.find_payment_method_by_name(src_record.payment_method_id.name)
 
         # Check if record already exists using x_old_id
@@ -99,8 +99,8 @@ class AccountPaymentHandler(DomainHandler):
                     pass
             return False
 
-        partner_type = _safe_str(getattr(src_record, 'partner_type', None), default='customer')
-        payment_type = _safe_str(getattr(src_record, 'payment_type', None), default='inbound')
+        partner_type = _safe_str(src_record.partner_type, default='customer')
+        payment_type = _safe_str(src_record.payment_type, default='inbound')
 
         data = {
             'amount': float(src_record.amount),
@@ -127,19 +127,19 @@ class AccountPaymentHandler(DomainHandler):
                     method_name = None
 
                 if payment_type == 'inbound':
-                    lines = getattr(journal, 'inbound_payment_method_line_ids', []) or []
+                    lines = journal.inbound_payment_method_line_ids or []
                 elif payment_type == 'outbound':
-                    lines = getattr(journal, 'outbound_payment_method_line_ids', []) or []
+                    lines = journal.outbound_payment_method_line_ids or []
                 else:
                     # For transfers, fall back to outbound then inbound
-                    lines = getattr(journal, 'outbound_payment_method_line_ids', []) or getattr(journal, 'inbound_payment_method_line_ids', []) or []
+                    lines = journal.outbound_payment_method_line_ids or journal.inbound_payment_method_line_ids or []
 
                 chosen_line_id = None
                 if method_name and lines:
                     for line in lines:
                         try:
-                            pm_name = getattr(getattr(line, 'payment_method_id', None), 'name', None)
-                            if pm_name == method_name or getattr(line, 'name', None) == method_name:
+                            pm_name = line.payment_method_id.name if line.payment_method_id else None
+                            if pm_name == method_name or line.name == method_name:
                                 chosen_line_id = line.id
                                 break
                         except Exception:
@@ -147,19 +147,19 @@ class AccountPaymentHandler(DomainHandler):
                 if not chosen_line_id and lines:
                     # Default to the first available method line for the journal/direction
                     first = lines[0]
-                    chosen_line_id = getattr(first, 'id', first if isinstance(first, int) else None)
+                    chosen_line_id = first.id
 
                 if chosen_line_id:
                     data['payment_method_line_id'] = chosen_line_id
                 else:
-                    logging.warning(f"No payment method line available for journal {journal_id} and payment_type {payment_type} (payment {getattr(src_record, 'id', None)})")
+                    logging.warning(f"No payment method line available for journal {journal_id} and payment_type {payment_type} (payment {src_record.id})")
             else:
-                logging.warning(f"Cannot resolve payment_method_line_id: missing journal for payment {getattr(src_record, 'id', None)}")
+                logging.warning(f"Cannot resolve payment_method_line_id: missing journal for payment {src_record.id}")
         except Exception as e:
-            logging.warning(f"Failed to resolve payment_method_line_id for payment {getattr(src_record, 'id', None)}: {e}")
+            logging.warning(f"Failed to resolve payment_method_line_id for payment {src_record.id}: {e}")
 
         # Add currency if available
-        if hasattr(src_record, 'currency_id') and src_record.currency_id:
+        if src_record.currency_id:
             # For currency, we can try name-based lookup as currency codes are standard
             dst_model = self.get_dst_model('res.currency')
             currency_ids = dst_model.search([('name', '=', src_record.currency_id.name)], limit=1)
@@ -167,24 +167,19 @@ class AccountPaymentHandler(DomainHandler):
                 data['currency_id'] = currency_ids[0]
 
         # Add optional fields
-        if hasattr(src_record, 'date') and src_record.date:
+        if src_record.date:
             data['date'] = _to_date_str(src_record.date)
         # Ensure mandatory date is set (fallback to today)
         if not data.get('date'):
             data['date'] = _date.today().isoformat()
         
-        base_ref = _safe_str(getattr(src_record, 'ref', None), default=False)
+        base_ref = _safe_str(src_record.ref, default=False)
         # Mark source invoice IDs in ref for later reconciliation
         src_inv_ids = []
         try:
-            invs = getattr(src_record, 'invoice_ids', [])
-            if callable(invs):
-                invs = []
-            # invoice_ids might be a recordset; try to iterate and extract .id
-            for inv in invs or []:
-                inv_id = getattr(inv, 'id', None)
-                if inv_id:
-                    src_inv_ids.append(inv_id)
+            invs = src_record.invoice_ids or []
+            for inv in invs:
+                src_inv_ids.append(inv.id)
         except Exception:
             src_inv_ids = []
 
