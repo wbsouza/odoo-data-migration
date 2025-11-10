@@ -96,10 +96,8 @@ class Migration:
 
                 domain = None
 
-                # For testing: limit account.move to id=3 only
-                # domain = None
-                # if model_name == 'account.move':
-                #     domain = [('id', '=', 3)]
+                if model_name == 'account.move':
+                    domain = [('type', '=', 'out_invoice')]
 
                 records = handler.fetch_items(
                     odoo=src_odoo,

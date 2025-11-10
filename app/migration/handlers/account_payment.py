@@ -103,14 +103,14 @@ class AccountPaymentHandler(DomainHandler):
         payment_type = _safe_str(getattr(src_record, 'payment_type', None), default='inbound')
 
         data = {
-            'amount': float(getattr(src_record, 'amount', 0.0) or 0.0),
+            'amount': float(src_record.amount),
             'partner_id': partner_id,
             'partner_type': partner_type,
             'payment_type': payment_type,
             'journal_id': journal_id,
             # Odoo 17 requires payment_method_line_id to be set for the selected journal/direction
             'company_id': company_id,  # Use destination company
-            'x_old_id': getattr(src_record, 'id', None),
+            'x_old_id': src_record.id,
             # Keep payment in draft; posting/reconciliation will be a later step
             'state': 'draft',
         }
@@ -122,7 +122,7 @@ class AccountPaymentHandler(DomainHandler):
                 journal = self.get_dst_model('account.journal').browse(journal_id)
                 method_name = None
                 try:
-                    method_name = getattr(getattr(src_record, 'payment_method_id', None), 'name', None)
+                    method_name = src_record.payment_method_id.name if src_record.payment_method_id else False
                 except Exception:
                     method_name = None
 
