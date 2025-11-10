@@ -85,7 +85,7 @@ class AccountMoveHandler(DomainHandler):
         key = f"{fiscal_position_id}_{company.id}_{partner.id}_{product.id}"
         result = self._tax_cache.get(key)
         if not result:
-            tax_ids = getattr(product.taxes_id, 'ids', []) if hasattr(product, 'taxes_id') else []
+            tax_ids = product.taxes_id.ids if (product and product.taxes_id) else []
             if tax_ids:
                 tax_model = self.get_dst_model('account.tax')
                 ids = tax_model.search([('id', 'in', tax_ids), ('company_id', '=', company.id)], limit=0)
@@ -136,8 +136,7 @@ class AccountMoveHandler(DomainHandler):
         }
 
         # Optional discounts if present on source line
-        if hasattr(line, 'discount'):
-            result['discount'] = line.discount
+        result['discount'] = line.discount
         # TODO: handle discount_type
         # if line.discount_type:
         #     result['discount_type'] = line.discount_type
@@ -155,7 +154,7 @@ class AccountMoveHandler(DomainHandler):
                 taxes_rs = self._get_product_taxes(fiscal_position_id, company, partner, product)
             else:
                 taxes_rs = self.get_dst_model('account.tax').browse([])
-            tax_ids = taxes_rs.ids if hasattr(taxes_rs, 'ids') else []
+            tax_ids = taxes_rs.ids if taxes_rs else []
             self._tax_ids_cache[key] = tax_ids
         return tax_ids
 
@@ -267,7 +266,7 @@ class AccountMoveHandler(DomainHandler):
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         company = self._get_company()
         # Ensure we pass the integer old partner ID, not a recordset
-        partner_id = self.get_new_partner_id_from_old_id(getattr(getattr(src_record, 'partner_id', None), 'id', False))
+        partner_id = self.get_new_partner_id_from_old_id(src_record.partner_id.id if src_record.partner_id else False)
         if not partner_id:
             logging.error(f"Skipping invoice old_id={src_record.id}: missing partner mapping")
             return []
@@ -306,12 +305,12 @@ class AccountMoveHandler(DomainHandler):
                 src_lines = [account_move_line_model.browse(lid) for lid in line_ids] if line_ids else []
                 filtered = []
                 for l in src_lines:
-                    inv_field = getattr(l, 'invoice_id', None)
-                    if not inv_field or (hasattr(inv_field, 'id') and inv_field.id == getattr(src_record, 'id', None)):
+                    inv_field = l.invoice_id
+                    if not inv_field or (inv_field.id == src_record.id):
                         filtered.append(l)
                 src_lines = filtered
             except Exception as e:
-                logging.warning(f"Failed to fetch account.move.line by move_id for invoice {getattr(src_record, 'id', None)}: {e}")
+                logging.warning(f"Failed to fetch account.move.line by move_id for invoice {src_record.id}: {e}")
                 src_lines = []
 
         for src_line in src_lines:
@@ -327,7 +326,7 @@ class AccountMoveHandler(DomainHandler):
             commands = []
             for src_line in src_lines:
                 vals = self._get_invoice_line_data(invoice_head, company, partner, src_line)
-                dst_line_id = find_id_by_old_id(conn_dst, 'account_move_line', getattr(src_line, 'id', None))
+                dst_line_id = find_id_by_old_id(conn_dst, 'account_move_line', src_line.id)
                 if dst_line_id:
                     commands.append((1, dst_line_id, vals))  # update in place
                 else:
