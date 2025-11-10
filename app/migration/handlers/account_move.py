@@ -108,7 +108,7 @@ class AccountMoveHandler(DomainHandler):
     def _get_invoice_line_data(self, invoice_head: Dict[str, Any], company, partner, line):
         """Build an invoice line dict using destination models and safe derivations."""
         # Resolve product
-        old_prod_id = getattr(getattr(line, 'product_id', None), 'id', None)
+        old_prod_id = line.product_id.id or False
         product_id = self.get_new_product_id_from_old_id(old_prod_id)
         product = self._product_cache.get(product_id)
 
@@ -116,16 +116,16 @@ class AccountMoveHandler(DomainHandler):
         account_id = self._get_account_id(company, invoice_head['fiscal_position_id'], product)
 
         # Derive price_unit and quantity
-        price_unit = getattr(line, 'price_unit', None)
+        price_unit = line.price_unit or False
         if price_unit is None:
-            price_unit = abs((getattr(line, 'credit', 0.0) or 0.0) or (getattr(line, 'debit', 0.0) or 0.0))
-        quantity = getattr(line, 'quantity', 1.0)
+            price_unit = abs((line.credit or 0.0) or (line.debit or 0.0))
+        quantity = line.quantity
 
         tax_ids = self._get_tax_ids(company, invoice_head['fiscal_position_id'], partner, product)
 
         result = {
             'account_id': account_id,
-            'name': getattr(line, 'name', '/') or '/',
+            'name': line.name or '/',
             'product_id': product.id if product else False,
             # In Odoo 17 invoice line, the unit of measure field is product_uom_id
             'product_uom_id': product.uom_id.id if product and product.uom_id else False,
@@ -187,11 +187,11 @@ class AccountMoveHandler(DomainHandler):
     def _get_invoice_data(self, company, partner, src_record):
         """Build invoice head data using destination models only; no self.env."""
         # Map user (optional)
-        old_user_id = getattr(getattr(src_record, 'user_id', None), 'id', None)
+        old_user_id = src_record.user_id.id if src_record.user_id else False
         user_id = self.get_new_user_id_from_old_id(old_user_id) or False
 
         # Partner shipping: map by old_id; browse as record
-        old_partner_id = getattr(getattr(src_record, 'partner_id', None), 'id', None)
+        old_partner_id = src_record.partner_id.id if src_record.partner_id else False
         partner_shipping_id = self.get_new_partner_shipping_id_from_old_id(old_partner_id) or partner.id
         partner_shipping = self._partner_cache.get(partner_shipping_id)
 
@@ -199,7 +199,8 @@ class AccountMoveHandler(DomainHandler):
         currency = partner.currency_id or company.currency_id
 
         # Move type from source (Odoo 11: 'type' field)
-        move_type = getattr(src_record, 'type', 'out_invoice') or 'out_invoice'
+        move_type = src_record.type or 'out_invoice'
+
 
         # Journal by type
         journal = self._get_invoice_journal(company)
@@ -234,7 +235,7 @@ class AccountMoveHandler(DomainHandler):
                     pass
             return False
 
-        inv_date = _to_date_str(getattr(src_record, 'date_invoice', None) or getattr(src_record, 'date', None))
+        inv_date = _to_date_str(src_record.date_invoice or src_record.date)
 
         # Guard helpers to avoid passing callables/records
         def _safe_str(val):
@@ -253,22 +254,20 @@ class AccountMoveHandler(DomainHandler):
             'invoice_payment_term_id': False,
             'user_id': user_id,
             'invoice_date': inv_date or False,
-            'start_date': _safe_str(getattr(src_record, 'start_date', False)) or False,
-            'end_date': _safe_str(getattr(src_record, 'end_date', False)) or False,
+            'start_date': _safe_str(src_record.start_date or False),
+            'end_date': _safe_str(src_record.end_date or False),
             'fiscal_position_id': fiscal_position_id,
             'x_old_id': src_record.id,
         }
         # Optional textual fields
-        invoice_data['ref'] = _safe_str(getattr(src_record, 'ref', False)) or False
-        invoice_data['narration'] = _safe_str(getattr(src_record, 'narration', False)) or False
+        invoice_data['ref'] = _safe_str(src_record.ref) or False
+        invoice_data['narration'] = _safe_str(src_record.narration) or False
         return invoice_data
-
-
-
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         company = self._get_company()
-        partner_id = self.get_new_partner_id_from_old_id(getattr(getattr(src_record, 'partner_id', None), 'id', None))
+        # Ensure we pass the integer old partner ID, not a recordset
+        partner_id = self.get_new_partner_id_from_old_id(getattr(getattr(src_record, 'partner_id', None), 'id', False))
         if not partner_id:
             logging.error(f"Skipping invoice old_id={src_record.id}: missing partner mapping")
             return []
@@ -348,8 +347,6 @@ class AccountMoveHandler(DomainHandler):
         dst_model = self.get_dst_model('account.move')
 
         for transformed_record in transformed_records:
-            if transformed_record['src_record'].invoice_line_ids['ids'][0] <= 11:
-                print("debug it")
             data = transformed_record['data']
             action = transformed_record['action']
             src_record = transformed_record['src_record']
