@@ -215,3 +215,134 @@ class AccountPaymentHandler(DomainHandler):
             entity_label='payment',
             name_field='ref',
         )
+
+    # Post-migration reconciliation-based details builder
+    def finalize_payment_details(self, inbound_only: bool = True) -> None:
+        """Rebuild account.payment.invoice.line from actual partial reconciliations in destination.
+
+        - Searches posted payments (optionally inbound only)
+        - For each payment, finds receivable/payable move lines and their partial reconciliations
+        - Aggregates allocations per invoice and writes invoice_line_ids idempotently
+        """
+        try:
+            pay_model = self.get_dst_model('account.payment')
+            domain = [('state', '=', 'posted')]
+            if inbound_only:
+                domain.append(('payment_type', '=', 'inbound'))
+            pay_ids = pay_model.search(domain, limit=0)
+            if not pay_ids:
+                return
+            pays = pay_model.browse(pay_ids)
+        except Exception as e:
+            logging.error(f"Failed to browse destination payments: {e}")
+            return
+
+        move_model = self.get_dst_model('account.move')
+        for pay in pays:
+            try:
+                move = getattr(pay, 'move_id', None)
+                if not move:
+                    continue
+                # Collect receivable/payable lines for this payment's move
+                try:
+                    pay_lines = []
+                    for ml in getattr(move, 'line_ids', []) or []:
+                        try:
+                            acct = getattr(ml, 'account_id', None)
+                            atype = getattr(acct, 'account_type', None) if acct else None
+                            if atype in ('asset_receivable', 'liability_payable'):
+                                pay_lines.append(ml)
+                        except Exception:
+                            continue
+                except Exception:
+                    pay_lines = []
+
+                allocations = {}
+                for ml in pay_lines:
+                    try:
+                        # On a payment line, credit for inbound payments is usually > 0
+                        # We aggregate both matched_credit_ids and matched_debit_ids safely
+                        pr_recs = []
+                        try:
+                            for pr in getattr(ml, 'matched_credit_ids', []) or []:
+                                pr_recs.append(pr)
+                        except Exception:
+                            pass
+                        try:
+                            for pr in getattr(ml, 'matched_debit_ids', []) or []:
+                                pr_recs.append(pr)
+                        except Exception:
+                            pass
+                        for pr in pr_recs:
+                            try:
+                                # Determine the counterpart invoice move line
+                                inv_ml = None
+                                try:
+                                    if getattr(pr, 'credit_move_id', None) and getattr(pr.credit_move_id, 'id', None) == getattr(ml, 'id', None):
+                                        inv_ml = getattr(pr, 'debit_move_id', None)
+                                    elif getattr(pr, 'debit_move_id', None) and getattr(pr.debit_move_id, 'id', None) == getattr(ml, 'id', None):
+                                        inv_ml = getattr(pr, 'credit_move_id', None)
+                                except Exception:
+                                    inv_ml = None
+                                if not inv_ml:
+                                    continue
+                                inv = getattr(inv_ml, 'move_id', None)
+                                inv_id = getattr(inv, 'id', None) if inv else None
+                                if not inv_id:
+                                    continue
+                                amount = float(getattr(pr, 'amount', 0.0) or 0.0)
+                                if amount <= 0.0:
+                                    continue
+                                if inv_id not in allocations:
+                                    allocations[inv_id] = {
+                                        'amount': 0.0,
+                                        'move_line_id': getattr(ml, 'id', None),
+                                    }
+                                allocations[inv_id]['amount'] += amount
+                            except Exception:
+                                continue
+                    except Exception:
+                        continue
+
+                if not allocations:
+                    # Nothing to write for this payment
+                    continue
+
+                # Build O2M commands
+                cmds = [(5, 0, 0)]
+                for inv_id, info in allocations.items():
+                    try:
+                        inv = move_model.browse(inv_id)
+                        inv_number = getattr(inv, 'name', False)
+                        inv_date = getattr(inv, 'invoice_date', False)
+                        inv_due = getattr(inv, 'invoice_date_due', False)
+                        inv_currency_id = getattr(inv.currency_id, 'id', False) if getattr(inv, 'currency_id', None) else False
+                        inv_amount_total = float(getattr(inv, 'amount_total', 0.0) or 0.0)
+                        inv_residual = float(getattr(inv, 'amount_residual', 0.0) or 0.0)
+                        allocation = float(info.get('amount', 0.0) or 0.0)
+                        balance_amount = inv_residual + allocation
+
+                        vals = {
+                            'move_line_id': info.get('move_line_id'),
+                            'invoice_id': inv_id,
+                            'payment_id': False,
+                            'invoice_number': inv_number or False,
+                            'invoice_date': inv_date or False,
+                            'due_date': inv_due or False,
+                            'original_amount': int(inv_amount_total * 100) / 100.00,
+                            'balance_amount': int(balance_amount * 100) / 100.00,
+                            'remaining_amount': int(inv_residual * 100) / 100.00,
+                            'currency_id': inv_currency_id or False,
+                            'allocation': int(allocation * 100) / 100.00,
+                            'full_reconcile': True if inv_residual == 0.0 else False,
+                        }
+                        cmds.append((0, 0, vals))
+                    except Exception:
+                        continue
+
+                try:
+                    pay_model.write([getattr(pay, 'id', None)], {'invoice_line_ids': cmds})
+                except Exception as e:
+                    logging.warning(f"Failed writing invoice lines for payment {getattr(pay, 'id', None)}: {e}")
+            except Exception as e:
+                logging.warning(f"Error finalizing payment {getattr(pay, 'id', None)}: {e}")

@@ -370,6 +370,8 @@ class AccountMoveHandler(DomainHandler):
                         record=src_record
                     )
 
+                dst_model.action_post([x_new_id])
+
             except Exception as e:
                 logging.error(f"Error processing account move '{src_record.name}': {str(e)}")
                 # Continue with next record instead of failing completely
