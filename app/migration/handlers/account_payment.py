@@ -2,10 +2,13 @@ import logging
 from datetime import date as _date
 from typing import Dict, List, Optional, Any
 
+
 from .base import DomainHandler
 from ..core.odoo_connection import OdooConnectionProvider, DESTINATION
 from ..core.database import DBConnectionProvider, find_id_by_old_id, find_record_by_old_id
 
+
+_logger = logging.getLogger(__name__)
 
 class AccountPaymentHandler(DomainHandler):
 
@@ -174,26 +177,10 @@ class AccountPaymentHandler(DomainHandler):
             data['date'] = _date.today().isoformat()
         
         base_ref = _safe_str(src_record.ref, default=False)
-        # Mark source invoice IDs in ref for later reconciliation
-        src_inv_ids = []
-        try:
-            invs = src_record.invoice_ids or []
-            for inv in invs:
-                src_inv_ids.append(inv.id)
-        except Exception:
-            src_inv_ids = []
 
-        marker = ''
-        if src_inv_ids:
-            marker = f" [SRC_INV: {','.join(str(i) for i in src_inv_ids)}]"
-        if base_ref:
-            data['ref'] = f"{base_ref}{marker}"
-        elif marker:
-            data['ref'] = marker.strip()
 
         # Do NOT link to account.move yet; invoices are draft and will change.
         # Reconciliation will occur in a later pass using the [SRC_INV: ids] marker above.
-
         transformed_record = {
             'action': 'update' if existing_record else 'create',
             'model': 'account.payment',
@@ -215,6 +202,27 @@ class AccountPaymentHandler(DomainHandler):
             entity_label='payment',
             name_field='ref',
         )
+
+        for transformed_record in transformed_records:
+            src_record = transformed_record['src_record']
+            invoice_ids = []
+            try:
+
+                # check the invoices that are still not linked to the payment
+                for src_invoice in src_record.invoice_ids:
+                    payment_id = transformed_record['id']
+                    invoice_id = find_id_by_old_id(self._db_provider.get_connection(DESTINATION), 'account.move', src_invoice.id)
+                    if not self._payment_contains_invoice(payment_id, invoice_id):
+                        invoice_ids.append((4, invoice_id))
+
+                # add the invoices to the payment
+                if len(invoice_ids) > 0:
+                    invoice_ids_data = { 'invoice_ids': invoice_ids }
+                    self.get_dst_model('account.payment').write([transformed_record['dst_record'].id], invoice_ids_data)
+
+            except Exception as ex:
+                _logger.error(f">>> ERROR: {ex}")
+
 
     # Post-migration reconciliation-based details builder
     def finalize_payment_details(self, inbound_only: bool = True) -> None:
@@ -346,3 +354,15 @@ class AccountPaymentHandler(DomainHandler):
                     logging.warning(f"Failed writing invoice lines for payment {getattr(pay, 'id', None)}: {e}")
             except Exception as e:
                 logging.warning(f"Error finalizing payment {getattr(pay, 'id', None)}: {e}")
+
+    def _payment_contains_invoice(self, payment_id, invoice_id):
+        exists = False
+        try:
+            conn = self._db_provider.get_connection(DESTINATION)
+            with conn.cursor() as cur:
+                sql = f"SELECT 1 FROM account_payment WHERE id = {payment_id} AND invoice_id = {invoice_id} LIMIT 1"
+                cur.execute(sql)
+                exists = cur.fetchone() is not None
+        except Exception as e:
+            _logger.warning(f"Error checking if payment {payment_id} contains invoice {invoice_id}: {e}")
+        return exists

@@ -99,9 +99,9 @@ class Migration:
                 if model_name == 'account.move':
                     # Odoo 11 account.invoice: exclude draft invoices
                     domain = [('type', '=', 'out_invoice'), ('state', '!=', 'draft')]
-                elif model_name == 'account.payment':
-                    # Migrate only confirmed payments to guarantee correctness of associations
-                    domain = [('state', '=', 'posted')]
+                # elif model_name == 'account.payment':
+                #     # Migrate only confirmed payments to guarantee correctness of associations
+                #     domain = [('state', '!=', 'draft')]
 
                 records = handler.fetch_items(
                     odoo=src_odoo,
@@ -143,15 +143,5 @@ class Migration:
         # Migrate each model in the correct sequence
         for model_name in self.models_to_migrate:
             self.migrate_model(model_name)
-
-        # Post-process: rebuild payment invoice details from reconciliations in destination
-        try:
-            handler = self.models_handlers.get('account.payment')
-            if handler:
-                _logger.info("Finalizing payment invoice details from reconciliations...")
-                handler.finalize_payment_details(inbound_only=True)
-                _logger.info("Payment invoice details finalization complete.")
-        except Exception as e:
-            _logger.warning(f"Failed to finalize payment invoice details: {e}")
 
         _logger.info("Migration process completed successfully.")

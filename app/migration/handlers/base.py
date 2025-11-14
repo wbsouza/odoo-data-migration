@@ -130,6 +130,7 @@ class DomainHandler:
                     dst_model = self.get_dst_model(model_name)
                     logging.info(f"Creating {entity_label} \"{label}\" ...")
                     x_new_id = dst_model.create(data)
+                    dst_record['id'] = x_new_id
 
                 elif action == 'update' and dst_record:
                     # Pure JSON-RPC: avoid browse()/recordsets; write by ids only
