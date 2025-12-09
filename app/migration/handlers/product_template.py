@@ -22,6 +22,12 @@ class ProductTemplateHandler(DomainHandler):
         db_conn = self._db_provider.get_connection(DESTINATION)
         table_name = self.get_dst_model_name().replace('.', '_')
         dst_id = find_id_by_old_id(db_conn, table_name, src_record.id)
+        website_meta_title = src_record.website_meta_title or None
+        website_meta_description = src_record.website_meta_description or None
+        website_meta_keywords = src_record.website_meta_keywords or None
+        seo_auto_update = False
+        if not src_record.website_meta_title or not src_record.website_meta_description or not src_record.website_meta_keywords:
+            src_record.seo_auto_update = True
 
         transformed_record = {
             'action': 'update' if dst_id else 'create',
@@ -46,6 +52,10 @@ class ProductTemplateHandler(DomainHandler):
                 'description': src_record.description or None,
                 'description_purchase': src_record.description_purchase or None,
                 'description_sale': src_record.description_sale or None,
+                'website_meta_title': website_meta_title,
+                'website_meta_description': website_meta_description,
+                'website_meta_keywords': website_meta_keywords,
+                'seo_auto_update': seo_auto_update,
                 'x_old_id': src_record.id,
             }
         }
