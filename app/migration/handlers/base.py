@@ -66,10 +66,24 @@ class DomainHandler:
 
     def fetch_items(self, odoo: OdooConnection, model_name: str, domain=None, offset: int = 0, order: str = None,
                     limit: int = 100) -> List[Dict]:
-        result = []
         domain = [] if domain is None else domain
         model = self.get_src_model(model_name)
         ids = model.search(domain, offset=offset, limit=limit, order=order)
+
+        # Fast path for product.attribute.value to avoid heavy browse() prefetch causing timeouts
+        if model_name == 'product.attribute.value':
+            if not ids:
+                return []
+            fields = ['name', 'attribute_id', 'sequence']
+            rows = model.read(ids, fields)
+            # Ensure each row has id
+            for i, rid in enumerate(ids):
+                if i < len(rows) and 'id' not in rows[i]:
+                    rows[i]['id'] = rid
+            return rows
+
+        # Default path: return recordsets
+        result = []
         for record in model.browse(ids):
             result.append(record)
         return result

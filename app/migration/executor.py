@@ -40,8 +40,8 @@ class Migration:
         create_tracking_fields(self._configs)
         self.models_to_migrate = [
             'product.category',
-            'product.template',
-            'product.attribute',
+            # 'product.template',
+            # 'product.attribute',
             'product.attribute.value',
             'product.attribute.line',
             'product.product',
@@ -95,6 +95,9 @@ class Migration:
                     source_model_name = 'account.invoice'
 
                 domain = None
+
+                if model_name == 'product.attribute.value':
+                    domain = []
 
                 if model_name == 'account.move':
                     # Odoo 11 account.invoice: exclude draft invoices

@@ -44,11 +44,16 @@ class ProductAttributeValueHandler(DomainHandler):
         return ids is not None and len(ids) > 0
 
     def find_dst_attribute_by_name(self, src_record):
-        domain = [('name', '=', src_record.attribute_id.name)]
+        # Expect dicts from optimized fetch: attribute_id -> [id, name]
+        attr_field = src_record.get('attribute_id')
+        attr_name = attr_field[1] if attr_field and len(attr_field) > 1 else None
+        if not attr_name:
+            return None
         model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['product.attribute']
-        attribute_id = model.search(domain)
-        attribute = model.browse(attribute_id[0])
-        return attribute
+        attribute_ids = model.search([('name', '=', attr_name)], limit=1)
+        if not attribute_ids:
+            attribute_ids = model.search([('name', 'ilike', attr_name)], limit=1)
+        return model.browse(attribute_ids[0]) if attribute_ids else None
 
     def find_dst_attribute_value(self, src_record):
         domain = [('name', '=', src_record.name)]
@@ -68,23 +73,29 @@ class ProductAttributeValueHandler(DomainHandler):
         return None
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
+        # Expect dicts from optimized fetch
+        src_id = src_record.get('id')
+        src_name = src_record.get('name')
+        src_seq = src_record.get('sequence') or 0
+
         dst_attribute = self.find_dst_attribute_by_name(src_record)
+        dst_attr_id = dst_attribute.id if dst_attribute else None
+
+        # Try to find existing destination value by name (kept simple)
+        dst_existing = self.find_dst_attribute_value_by_name(src_name)
+
         transformed_record = {
-            'action': 'create',
+            'action': 'update' if dst_existing else 'create',
             'model': 'product.attribute.value',
             'src_record': src_record,
-            'dst_record': self.find_dst_attribute_value_by_name(src_record.name),
+            'dst_record': dst_existing,
             'data': {
-            'name': src_record.name,
-            'attribute_id': dst_attribute.id,
-            'sequence': dst_attribute.sequence,
-            'x_old_id': src_record.id,
+                'name': src_name,
+                'attribute_id': dst_attr_id,
+                'sequence': src_seq,
+                'x_old_id': src_id,
             }
         }
-
-        # already exists ...
-        if transformed_record['dst_record'] is not None:
-            transformed_record['action'] = 'update'
 
         return [transformed_record]
 
@@ -103,16 +114,30 @@ class ProductAttributeValueHandler(DomainHandler):
 
                 if action == 'create':
                     dst_model = self.get_dst_model()
-                    logging.info(f"Creating attribute value \"{src_record.name}\" ...")
+                    label = data.get('name') or data.get('x_old_id') or 'unknown'
+                    logging.info(f"Creating attribute value \"{label}\" ...")
                     x_new_id = dst_model.create(data)
 
                 elif action == 'update':
-                    logging.info(f"Updating attribute value \"{src_record.name}\" ...")
+                    label = data.get('name') or data.get('x_old_id') or 'unknown'
+                    logging.info(f"Updating attribute value \"{label}\" ...")
                     dst_record = transformed_record['dst_record']
                     dst_record.write(data)
                     x_new_id = dst_record.id
 
-                self.update_tracking_ids(
-                    x_new_id=x_new_id,
-                    record=src_record
+                # Direct tracking updates without building an object
+                src_id = transformed_record['data'].get('x_old_id')
+                self._update_tracking_id(
+                    connection_type='source',
+                    model_name=self.src_model_name,
+                    record_id=src_id,
+                    field_name='x_new_id',
+                    field_value=x_new_id
+                )
+                self._update_tracking_id(
+                    connection_type='destination',
+                    model_name=self.get_dst_model_name(),
+                    record_id=x_new_id,
+                    field_name='x_old_id',
+                    field_value=src_id
                 )
