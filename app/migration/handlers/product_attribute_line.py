@@ -151,48 +151,107 @@ class ProductAttributeLineHandler(DomainHandler):
 
     def sync_variant_default_codes(self, src_record, dst_template_id):
         """
-        After creating attribute lines, sync default_code from Odoo 11 variants 
+        After creating attribute lines, sync default_code from Odoo 11 variants
         to the corresponding Odoo 17 variants that were auto-generated.
+        This implementation avoids recordset browse() and uses read() with minimal fields
+        to prevent RPC timeouts when accessing relational fields like attribute_value_ids.
         """
-        # Get all source variants for this template
-        src_variant_ids = self._odoo_src.session.env['product.product'].search([
-            ('product_tmpl_id', '=', src_record.product_tmpl_id.id)
-        ])
-        src_variants = self._odoo_src.session.env['product.product'].browse(src_variant_ids)
-        
-        # Get all destination variants for this template
-        dst_variant_ids = self._odoo_dst.session.env['product.product'].search([
-            ('product_tmpl_id', '=', dst_template_id)
-        ])
-        dst_variants = self._odoo_dst.session.env['product.product'].browse(dst_variant_ids)
-        
-        logging.info(f"Syncing default_code for {len(src_variants)} source variants to {len(dst_variants)} destination variants")
-        
-        # Create mapping based on attribute value combinations
-        for src_variant in src_variants:
-            if not src_variant.default_code:
+        src_env = self._odoo_src.session.env
+        dst_env = self._odoo_dst.session.env
+
+        # Read product_tmpl_id from source attribute line without dereferencing relations
+        line_rows = src_env['product.attribute.line'].read([src_record.id], ['product_tmpl_id'])
+        if not line_rows:
+            return
+        src_pt_id = line_rows[0]['product_tmpl_id'][0]
+
+        # Source variants: ids only, then minimal fields
+        src_pp = src_env['product.product']
+        src_variant_ids = src_pp.search([('product_tmpl_id', '=', src_pt_id)])
+        if not src_variant_ids:
+            return
+        src_rows = src_pp.read(src_variant_ids, ['attribute_value_ids', 'default_code'])
+
+        # Build cache for source product.attribute.value names
+        all_pav_ids = set()
+        for row in src_rows:
+            for vid in row.get('attribute_value_ids') or []:
+                all_pav_ids.add(vid)
+        pav_cache = {}
+        if all_pav_ids:
+            pav_rows = src_env['product.attribute.value'].read(list(all_pav_ids), ['attribute_id', 'name'])
+            for r in pav_rows:
+                attr = r.get('attribute_id')
+                attr_name = attr[1] if attr and len(attr) > 1 else ''
+                pav_cache[r['id']] = (attr_name, r.get('name') or '')
+
+        # Destination variants: ids only, then minimal fields
+        dst_pp = dst_env['product.product']
+        dst_variant_ids = dst_pp.search([('product_tmpl_id', '=', dst_template_id)])
+        if not dst_variant_ids:
+            return
+        dst_rows = dst_pp.read(dst_variant_ids, ['product_template_attribute_value_ids', 'default_code'])
+
+        # Build cache for destination product.template.attribute.value names
+        all_ptav_ids = set()
+        for row in dst_rows:
+            for vid in row.get('product_template_attribute_value_ids') or []:
+                all_ptav_ids.add(vid)
+        ptav_cache = {}
+        if all_ptav_ids:
+            ptav_rows = dst_env['product.template.attribute.value'].read(list(all_ptav_ids), ['attribute_id', 'product_attribute_value_id'])
+            for r in ptav_rows:
+                attr = r.get('attribute_id')
+                pav = r.get('product_attribute_value_id')
+                attr_name = attr[1] if attr and len(attr) > 1 else ''
+                val_name = pav[1] if pav and len(pav) > 1 else ''
+                ptav_cache[r['id']] = (attr_name, val_name)
+
+        # Helpers to build combination keys from id lists using caches
+        def key_from_pav_ids(pav_ids):
+            parts = []
+            for pid in pav_ids or []:
+                names = pav_cache.get(pid)
+                if names:
+                    parts.append(f"{names[0]}:{names[1]}")
+            parts.sort()
+            return "|".join(parts)
+
+        def key_from_ptav_ids(ptav_ids):
+            parts = []
+            for pid in ptav_ids or []:
+                names = ptav_cache.get(pid)
+                if names:
+                    parts.append(f"{names[0]}:{names[1]}")
+            parts.sort()
+            return "|".join(parts)
+
+        # Build maps
+        src_map = {}
+        for row in src_rows:
+            code = row.get('default_code')
+            if not code:
                 continue
-                
-            # Build attribute combination key for source variant
-            src_attr_combo = self._build_attribute_combination_key(src_variant)
-            
-            # Find matching destination variant
-            matching_dst_variant = None
-            for dst_variant in dst_variants:
-                dst_attr_combo = self._build_attribute_combination_key_v17(dst_variant)
-                if src_attr_combo == dst_attr_combo:
-                    matching_dst_variant = dst_variant
-                    break
-            
-            # Update default_code if match found
-            if matching_dst_variant:
-                if not matching_dst_variant.default_code:  # Only update if empty
-                    matching_dst_variant.write({'default_code': src_variant.default_code})
-                    logging.info(f"Updated variant {matching_dst_variant.id} default_code: {src_variant.default_code}")
-                else:
-                    logging.info(f"Skipped variant {matching_dst_variant.id} - already has default_code: {matching_dst_variant.default_code}")
-            else:
-                logging.warning(f"No matching destination variant found for source variant {src_variant.id} with combo: {src_attr_combo}")
+            key = key_from_pav_ids(row.get('attribute_value_ids'))
+            if key:
+                src_map[key] = code
+
+        dst_map = {}
+        for row in dst_rows:
+            key = key_from_ptav_ids(row.get('product_template_attribute_value_ids'))
+            if key:
+                dst_map[key] = {'id': row['id'], 'default_code': row.get('default_code')}
+
+        # Apply updates where destination default_code is empty
+        updates = []
+        for key, code in src_map.items():
+            info = dst_map.get(key)
+            if info and not info.get('default_code'):
+                updates.append((info['id'], code))
+
+        for vid, code in updates:
+            dst_pp.write([vid], {'default_code': code})
+            logging.info(f"Updated variant {vid} default_code: {code}")
 
     def _build_attribute_combination_key(self, variant):
         """Build a key representing the attribute combination for Odoo 11 variant"""
