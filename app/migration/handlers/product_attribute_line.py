@@ -44,19 +44,22 @@ class ProductAttributeLineHandler(DomainHandler):
         return None
 
     def find_dst_product_tmpl(self, record):
-        domain = [('name', '=', record.product_tmpl_id.name)]
+        # Support dict records from optimized fetch: product_tmpl_id -> [id, name]
+        pt_field = record.get('product_tmpl_id') if isinstance(record, dict) else None
+        pt_name = pt_field[1] if pt_field and len(pt_field) > 1 else (record.product_tmpl_id.name if hasattr(record, 'product_tmpl_id') else None)
         model = self._odoo_dst.session.env['product.template']
-        product_tmpl_id = model.search(domain)
-        product_tmpl = model.browse(product_tmpl_id[0])
-        return product_tmpl
+        ids = model.search([('name', '=', pt_name)], limit=1)
+        return model.browse(ids[0]) if ids else None
 
     def find_dst_attribute(self, record):
-        domain = [('name', '=', record.attribute_id.name)]
-
+        # Support dict records from optimized fetch: attribute_id -> [id, name]
+        attr_field = record.get('attribute_id') if isinstance(record, dict) else None
+        attr_name = attr_field[1] if attr_field and len(attr_field) > 1 else (record.attribute_id.name if hasattr(record, 'attribute_id') else None)
         model = self._odoo_dst.session.env['product.attribute']
-        attribute_id = model.search(domain)
-        attribute = model.browse(attribute_id[0])
-        return attribute
+        ids = model.search([('name', '=', attr_name)], limit=1)
+        if not ids and attr_name:
+            ids = model.search([('name', 'ilike', attr_name)], limit=1)
+        return model.browse(ids[0]) if ids else None
 
     def find_attribute_values(self, attribute):
         domain = [('attribute_id', '=', attribute.id)]
@@ -95,35 +98,55 @@ class ProductAttributeLineHandler(DomainHandler):
         for this specific template and attribute combination.
         This prevents cartesian product creation and migrates EXACTLY what exists.
         """
-        # Find all existing product.product variants in Odoo 11 for this template
-        src_product_ids = self._odoo_src.session.env['product.product'].search([
-            ('product_tmpl_id', '=', src_record.product_tmpl_id.id)
-        ])
-        
-        # Browse the records to get actual record objects
-        src_products = self._odoo_src.session.env['product.product'].browse(src_product_ids)
-        
-        # Collect attribute values used by these specific variants for this attribute
+        # Extract source ids from dict
+        src_pt_field = src_record.get('product_tmpl_id')
+        src_attr_field = src_record.get('attribute_id')
+        src_pt_id = src_pt_field[0] if src_pt_field else None
+        src_attr_id = src_attr_field[0] if src_attr_field else None
+
+        # Find all existing product.product variants in Odoo 11 for this template (IDs only)
+        pp_model = self._odoo_src.session.env['product.product']
+        src_product_ids = pp_model.search([('product_tmpl_id', '=', src_pt_id)])
+        if not src_product_ids:
+            return []
+
+        # Read only attribute_value_ids from variants
+        variants = pp_model.read(src_product_ids, ['attribute_value_ids'])
+        value_id_set = set()
+        for row in variants:
+            val_ids = row.get('attribute_value_ids') or []
+            for vid in val_ids:
+                value_id_set.add(vid)
+
+        if not value_id_set:
+            return []
+
+        # Read attribute values to filter by the specific attribute
+        pav_model = self._odoo_src.session.env['product.attribute.value']
+        pav_rows = pav_model.read(list(value_id_set), ['attribute_id', 'name'])
         used_value_names = set()
-        for product in src_products:
-            # Get attribute values for this product and this specific attribute
-            for attr_value in product.attribute_value_ids:
-                if attr_value.attribute_id.id == src_record.attribute_id.id:
-                    used_value_names.add(attr_value.name)
-        
+        for pav in pav_rows:
+            attr = pav.get('attribute_id')
+            attr_id = attr[0] if attr and len(attr) > 0 else None
+            if attr_id == src_attr_id:
+                name = pav.get('name')
+                if name:
+                    used_value_names.add(name)
+
         # Find corresponding values in destination Odoo 17
         dst_attribute = self.find_dst_attribute(src_record)
         dst_value_ids = []
-        
+
         for value_name in used_value_names:
             domain = [('attribute_id', '=', dst_attribute.id), ('name', '=', value_name)]
             dst_value_ids_found = self._odoo_dst.session.env['product.attribute.value'].search(domain, limit=1)
             if dst_value_ids_found:
                 dst_value_ids.append(dst_value_ids_found[0])
-        
-        logging.info(f"Template {src_record.product_tmpl_id.name}, Attribute {src_record.attribute_id.name}: "
-                    f"Found {len(dst_value_ids)} specific values: {list(used_value_names)}")
-        
+
+        pt_name = src_pt_field[1] if src_pt_field and len(src_pt_field) > 1 else 'unknown'
+        attr_name = src_attr_field[1] if src_attr_field and len(src_attr_field) > 1 else 'unknown'
+        logging.info(f"Template {pt_name}, Attribute {attr_name}: Found {len(dst_value_ids)} specific values: {list(used_value_names)}")
+
         return dst_value_ids
 
     def sync_variant_default_codes(self, src_record, dst_template_id):
@@ -196,8 +219,11 @@ class ProductAttributeLineHandler(DomainHandler):
         
         # Skip if no specific values found (prevents empty attribute lines)
         if not values_ids:
-            logging.warning(f"No specific attribute values found for template {src_record.product_tmpl_id.name}, "
-                          f"attribute {src_record.attribute_id.name}. Skipping.")
+            pt_field = src_record.get('product_tmpl_id')
+            at_field = src_record.get('attribute_id')
+            pt_name = pt_field[1] if pt_field and len(pt_field) > 1 else 'unknown'
+            at_name = at_field[1] if at_field and len(at_field) > 1 else 'unknown'
+            logging.warning(f"No specific attribute values found for template {pt_name}, attribute {at_name}. Skipping.")
             return []
         transformed_record = {
             'action': 'create',
@@ -207,7 +233,7 @@ class ProductAttributeLineHandler(DomainHandler):
             'data': {
                 'attribute_id': dst_attribute.id,
                 'product_tmpl_id': product_tmpl.id,
-                'x_old_id': src_record.id,
+                'x_old_id': src_record.get('id'),
                 'value_ids': [(6, 0, values_ids)],
             }
         }

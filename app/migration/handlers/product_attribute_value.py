@@ -72,6 +72,13 @@ class ProductAttributeValueHandler(DomainHandler):
             return model.browse(ids[0])[0]
         return None
 
+    def find_dst_value_by_attr_and_name(self, attribute_id: int, name: str):
+        model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['product.attribute.value']
+        if not attribute_id or not name:
+            return None
+        ids = model.search([('attribute_id', '=', attribute_id), ('name', '=', name)], limit=1)
+        return model.browse(ids[0])[0] if ids else None
+
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         # Expect dicts from optimized fetch
         src_id = src_record.get('id')
@@ -81,8 +88,8 @@ class ProductAttributeValueHandler(DomainHandler):
         dst_attribute = self.find_dst_attribute_by_name(src_record)
         dst_attr_id = dst_attribute.id if dst_attribute else None
 
-        # Try to find existing destination value by name (kept simple)
-        dst_existing = self.find_dst_attribute_value_by_name(src_name)
+        # Try to find existing destination value by (attribute, name) to avoid duplicates
+        dst_existing = self.find_dst_value_by_attr_and_name(dst_attr_id, src_name)
 
         transformed_record = {
             'action': 'update' if dst_existing else 'create',

@@ -82,6 +82,17 @@ class DomainHandler:
                     rows[i]['id'] = rid
             return rows
 
+        # Fast path for product.attribute.line to avoid heavy browse() prefetch causing timeouts
+        if model_name == 'product.attribute.line':
+            if not ids:
+                return []
+            fields = ['product_tmpl_id', 'attribute_id']
+            rows = model.read(ids, fields)
+            for i, rid in enumerate(ids):
+                if i < len(rows) and 'id' not in rows[i]:
+                    rows[i]['id'] = rid
+            return rows
+
         # Default path: return recordsets
         result = []
         for record in model.browse(ids):
