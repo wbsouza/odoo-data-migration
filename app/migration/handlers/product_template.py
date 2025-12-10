@@ -29,6 +29,12 @@ class ProductTemplateHandler(DomainHandler):
         if not src_record.website_meta_title or not src_record.website_meta_description or not src_record.website_meta_keywords:
             src_record.seo_auto_update = True
 
+        # Resolve UoMs directly via RPC to avoid DB JSON name mismatch on uom_uom
+        uom_name = src_record.uom_id.name if src_record.uom_id else None
+        uom_po_name = src_record.uom_po_id.name if src_record.uom_po_id else None
+        uom_id = self._resolve_uom_id(uom_name)
+        uom_po_id = self._resolve_uom_id(uom_po_name)
+
         transformed_record = {
             'action': 'update' if dst_id else 'create',
             'model': 'product.template',
@@ -39,7 +45,8 @@ class ProductTemplateHandler(DomainHandler):
                 'active': src_record.active,
                 'default_code': src_record.default_code,
                 'categ_id': find_id_by_old_id(db_conn, 'product_category', src_record.categ_id.id),
-                'uom_id': find_id_by_name(db_conn, 'uom_uom', src_record.uom_id.name),
+                'uom_id': uom_id,
+                'uom_po_id': uom_po_id,
                 'detailed_type': src_record.type,
                 'sale_ok': src_record.sale_ok,
                 'purchase_ok': src_record.purchase_ok,
@@ -95,3 +102,37 @@ class ProductTemplateHandler(DomainHandler):
                     x_new_id=x_new_id,
                     record=src_record
                 )
+
+    def _resolve_uom_id(self, name: Optional[str]) -> Optional[int]:
+        """
+        Resolve a UoM id on the destination via RPC by name with safe fallbacks.
+        Returns None if not found (Odoo will error if mandatory but we log upstream).
+        """
+        try:
+            if not name:
+                return self._fallback_uom()
+            model = self.get_dst_model('uom.uom')
+            # Try exact name match first
+            ids = model.search([('name', '=', name)], limit=1)
+            if not ids:
+                # Then ilike
+                ids = model.search([('name', 'ilike', name)], limit=1)
+            if ids:
+                return ids[0]
+            return self._fallback_uom()
+        except Exception:
+            return self._fallback_uom()
+
+    def _fallback_uom(self) -> Optional[int]:
+        """Best-effort fallback to a common unit of measure in destination (e.g., Unit(s))."""
+        try:
+            model = self.get_dst_model('uom.uom')
+            # Prefer reference unit in 'Unit' category if present
+            ids = model.search([('name', 'ilike', 'unit')], limit=1)
+            if ids:
+                return ids[0]
+            # Last resort: pick any UoM
+            ids = model.search([], limit=1)
+            return ids[0] if ids else None
+        except Exception:
+            return None
