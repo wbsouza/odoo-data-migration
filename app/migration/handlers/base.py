@@ -93,6 +93,17 @@ class DomainHandler:
                     rows[i]['id'] = rid
             return rows
 
+        # Fast path for product.attribute.price to avoid cache issues on many2one access
+        if model_name == 'product.attribute.price':
+            if not ids:
+                return []
+            fields = ['product_tmpl_id', 'value_id', 'price_plus', 'price_multiple']
+            rows = model.read(ids, fields)
+            for i, rid in enumerate(ids):
+                if i < len(rows) and 'id' not in rows[i]:
+                    rows[i]['id'] = rid
+            return rows
+
         # Default path: return recordsets
         result = []
         for record in model.browse(ids):

@@ -54,10 +54,6 @@ class ProductProductHandler(DomainHandler):
             dst_record = self.find_dst_product(src_record)
 
         if not dst_record:
-            logging.warning(
-                f"Skipping product variant old_id={src_record.id} (template='{src_record.product_tmpl_id.name}'): "
-                f"no matching destination variant found."
-            )
             return []
 
         result = [{
@@ -67,6 +63,8 @@ class ProductProductHandler(DomainHandler):
             'dst_record': dst_record,
             'data': {
                 'default_code': src_record.default_code,
+                # 'lst_price': src_record.lst_price or None,
+                # 'esp_price': src_record.esp_price or None,
                 'x_old_id': src_record.id,
             }
         }]
