@@ -84,7 +84,7 @@ class Migration:
             # Fetch records from the source system
             eof = False
             offset = 0
-            batch_size = 100
+            batch_size = 500
             while not eof:
 
                 src_odoo = self._odoo_provider.get_odoo_connection(SOURCE)

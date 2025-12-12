@@ -86,6 +86,21 @@ class ProductProductHandler(DomainHandler):
 
         dst_product_tmpl_id = self._resolve_dst_template_id(src_record)
 
+        if 10196 < src_record.id < 10199:
+            print('debug it')
+
+        if 10158 < src_record.id < 10160:
+            print('debug it')
+
+        if 10100 < src_record.id < 10097:
+            print('debug it')
+
+        if 10069 < src_record.id < 10087:
+            print('debug it')
+
+        if src_record.id in [10069, 10070, 10071, 10091, 10093, 10094, 10088, 10091, 10158]:
+            print('debug it')
+
         data = {
             # Required for create
             'product_tmpl_id': dst_product_tmpl_id,
