@@ -77,29 +77,17 @@ class ProductAttributePriceHandler(DomainHandler):
         conn = self._db_provider.get_connection(DESTINATION)
         dst_tmpl_id = find_id_by_old_id(conn, 'product_template', src_tmpl_id)
         if not dst_tmpl_id:
-            logging.warning(
-                f"Skipping attribute price old_id={src_label}: product template not mapped"
-            )
             return []
 
         if not src_pav_id:
-            logging.warning(
-                f"Skipping attribute price old_id={src_label}: missing value_id"
-            )
             return []
 
         dst_pav_id = find_id_by_old_id(conn, 'product_attribute_value', src_pav_id)
         if not dst_pav_id:
-            logging.warning(
-                f"Skipping attribute price old_id={src_label}: attribute value not mapped"
-            )
             return []
 
         dst_ptav_id = self._find_dst_ptav_id(dst_tmpl_id, dst_pav_id)
         if not dst_ptav_id:
-            logging.warning(
-                f"Skipping attribute price old_id={src_label}: PTAV not found for tmpl_id={dst_tmpl_id} pav_id={dst_pav_id}"
-            )
             return []
 
         data = {
@@ -137,7 +125,6 @@ class ProductAttributePriceHandler(DomainHandler):
                     dst_id = None
             if not dst_id:
                 continue
-            logging.info('Updating attribute price (PTAV) "unknown" ...')
             try:
                 dst_model.write([dst_id], data)
             except Exception as e:

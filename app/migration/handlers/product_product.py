@@ -56,6 +56,21 @@ class ProductProductHandler(DomainHandler):
         if not dst_record:
             return []
 
+        if src_record.id > 10196 and src_record.id < 10199:
+            print('debug it')
+
+        if src_record.id > 10158 and src_record.id < 10160:
+            print('debug it')
+
+        if src_record.id > 10097 and src_record.id < 10100:
+            print('debug it')
+
+        if src_record.id > 10069 and src_record.id < 10087:
+            print('debug it')
+
+        if src_record.id in [10069, 10070, 10071, 10091, 10093, 10094, 10088, 10091, 10158]:
+            print('debug it')
+
         result = [{
             'action': 'update',
             'model': 'product.product',
@@ -63,8 +78,8 @@ class ProductProductHandler(DomainHandler):
             'dst_record': dst_record,
             'data': {
                 'default_code': src_record.default_code,
-                # 'lst_price': src_record.lst_price or None,
-                # 'esp_price': src_record.esp_price or None,
+                'product_description': src_record.product_description,
+                'description_sale': src_record.description_sale,
                 'x_old_id': src_record.id,
             }
         }]

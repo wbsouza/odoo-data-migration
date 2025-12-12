@@ -63,6 +63,7 @@ class ProductTemplateHandler(DomainHandler):
                 'website_meta_description': website_meta_description,
                 'website_meta_keywords': website_meta_keywords,
                 'seo_auto_update': seo_auto_update,
+                'product_summary': src_record.product_summary,
                 'x_old_id': src_record.id,
             }
         }
