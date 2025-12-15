@@ -8,6 +8,9 @@ from ..core.odoo_connection import OdooConnectionProvider, DESTINATION, SOURCE
 from ..core.database import DBConnectionProvider, find_id_by_old_id, find_id_by_name
 
 
+_logger = logging.getLogger(__name__)
+
+
 class ProductTemplateHandler(DomainHandler):
 
     def __init__(
@@ -19,6 +22,11 @@ class ProductTemplateHandler(DomainHandler):
         super().__init__(odoo_provider, db_provider, model_name)
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
+        _logger.info(
+            "Processing product.template src_id=%s default_code=%s",
+            getattr(src_record, 'id', None),
+            getattr(src_record, 'default_code', None),
+        )
         db_conn = self._db_provider.get_connection(DESTINATION)
         table_name = self.get_dst_model_name().replace('.', '_')
         dst_id = find_id_by_old_id(db_conn, table_name, src_record.id)
@@ -90,18 +98,39 @@ class ProductTemplateHandler(DomainHandler):
 
                 if action == 'create':
                     dst_model = self.get_dst_model()
-                    logging.info(f"Creating {model_name} \"{src_record.name}\" ...")
+                    _logger.info(
+                        "Creating product.template src_id=%s default_code=%s name=%s",
+                        getattr(src_record, 'id', None),
+                        getattr(src_record, 'default_code', None),
+                        getattr(src_record, 'name', None),
+                    )
                     x_new_id = dst_model.create(data)
 
                 elif action == 'update':
-                    logging.info(f"Updating template \"{src_record.name}\" ...")
+                    _logger.info(
+                        "Updating product.template dst_id=%s src_id=%s default_code=%s name=%s",
+                        getattr(transformed_record.get('dst_record'), 'id', None) if transformed_record.get('dst_record') else None,
+                        getattr(src_record, 'id', None),
+                        getattr(src_record, 'default_code', None),
+                        getattr(src_record, 'name', None),
+                    )
                     dst_record = transformed_record['dst_record']
                     dst_record.write(data)
                     x_new_id = dst_record.id
 
+                _logger.info(
+                    "Saving tracking mapping in DB for product.template: src_id=%s -> dst_id=%s (x_old_id)",
+                    getattr(src_record, 'id', None),
+                    x_new_id,
+                )
                 self.update_tracking_ids(
                     x_new_id=x_new_id,
                     record=src_record
+                )
+                _logger.info(
+                    "Saved tracking mapping in DB for product.template: src_id=%s -> dst_id=%s (x_old_id)",
+                    getattr(src_record, 'id', None),
+                    x_new_id,
                 )
 
     def _resolve_uom_id(self, name: Optional[str]) -> Optional[int]:

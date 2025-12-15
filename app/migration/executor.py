@@ -40,12 +40,12 @@ class Migration:
         self._mappings_provider.load_mappings_from_database("res.groups", "name")
         create_tracking_fields(self._configs)
         self.models_to_migrate = [
-            'product.category',
-            'product.template',
-            'product.attribute',
-            'product.attribute.value',
-            'product.attribute.line',
-            'product.attribute.price',
+            # 'product.category',
+            # 'product.template',
+            # 'product.attribute',
+            # 'product.attribute.value',
+            # 'product.attribute.line',
+            # 'product.attribute.price',
             'product.product',
             # 'res.partner',
             # 'res.partner.parent',  # Second phase for parent_id relationships

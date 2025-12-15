@@ -6,6 +6,9 @@ from ..core.odoo_connection import OdooConnectionProvider, SOURCE, DESTINATION
 from ..core.database import DBConnectionProvider, find_id_by_old_id, find_record_by_old_id
 
 
+_logger = logging.getLogger(__name__)
+
+
 class ProductProductHandler(DomainHandler):
 
     def __init__(
@@ -69,6 +72,11 @@ class ProductProductHandler(DomainHandler):
         # 1) Prefer lookup by x_old_id (DB) for deterministic mapping.
         # 2) Fallback to template + default_code (RPC search).
         # 3) If not found, prepare a create payload.
+        _logger.info(
+            "Processing product.product src_id=%s default_code=%s",
+            getattr(src_record, 'id', None),
+            getattr(src_record, 'default_code', None),
+        )
         conn = self._db_provider.get_connection(DESTINATION)
 
         existing_product = find_record_by_old_id(conn, 'product_product', src_record.id)
@@ -79,27 +87,24 @@ class ProductProductHandler(DomainHandler):
         if existing_product:
             dst_id = existing_product['id']
             dst_record = self._dst_model_including_archived('product.product').browse(dst_id)
+            _logger.info(
+                "Found destination product.product by x_old_id mapping src_id=%s -> dst_id=%s",
+                getattr(src_record, 'id', None),
+                dst_id,
+            )
         else:
             dst_record = self.find_dst_product(src_record)
             if dst_record:
                 dst_id = dst_record.id
+                _logger.info(
+                    "Found destination product.product by fallback lookup src_id=%s default_code=%s -> dst_id=%s",
+                    getattr(src_record, 'id', None),
+                    getattr(src_record, 'default_code', None),
+                    dst_id,
+                )
 
         dst_product_tmpl_id = self._resolve_dst_template_id(src_record)
 
-        if 10196 < src_record.id < 10199:
-            print('debug it')
-
-        if 10158 < src_record.id < 10160:
-            print('debug it')
-
-        if 10100 < src_record.id < 10097:
-            print('debug it')
-
-        if 10069 < src_record.id < 10087:
-            print('debug it')
-
-        if src_record.id in [10069, 10070, 10071, 10091, 10093, 10094, 10088, 10091, 10158]:
-            print('debug it')
 
         data = {
             # Required for create
@@ -138,12 +143,20 @@ class ProductProductHandler(DomainHandler):
             data = transformed_record['data']
             action = transformed_record['action']
             src_record = transformed_record['src_record']
+            _logger.info(
+                "Persisting product.product action=%s src_id=%s default_code=%s",
+                action,
+                getattr(src_record, 'id', None),
+                getattr(src_record, 'default_code', None),
+            )
 
             if action not in ['create', 'update']:
                 continue
 
             try:
                 dst_model = self._dst_model_including_archived('product.product')
+
+                vals = dict(data)
 
                 if action == 'create':
                     # Odoo 17 variants are uniquely identified by (product_tmpl_id, combination_indices).
@@ -155,14 +168,28 @@ class ProductProductHandler(DomainHandler):
                         dst_record = self._find_single_variant_for_template(data['product_tmpl_id'])
 
                     if dst_record:
-                        logging.info(
-                            f"Updating {model_name} (dst_id={dst_record.id}, old_id={src_record.id}) ..."
+                        _logger.info(
+                            "Writing existing product.product (update-on-create) dst_id=%s src_id=%s default_code=%s",
+                            getattr(dst_record, 'id', None),
+                            getattr(src_record, 'id', None),
+                            getattr(src_record, 'default_code', None),
                         )
-                        dst_record.write(data)
+                        # Avoid overwriting an existing x_old_id when multiple source variants
+                        # collapse into a single destination variant.
+                        try:
+                            existing_old_id = getattr(dst_record, 'x_old_id', None)
+                        except Exception:
+                            existing_old_id = None
+                        if existing_old_id and existing_old_id != src_record.id:
+                            vals.pop('x_old_id', None)
+                        dst_record.write(vals)
                         x_new_id = dst_record.id
                     else:
-                        logging.info(
-                            f"Creating {model_name} (old_id={src_record.id}, default_code={src_record.default_code}) ..."
+                        _logger.info(
+                            "Creating product.product src_id=%s default_code=%s product_tmpl_id=%s",
+                            getattr(src_record, 'id', None),
+                            getattr(src_record, 'default_code', None),
+                            data.get('product_tmpl_id'),
                         )
                         try:
                             x_new_id = dst_model.create(data)
@@ -171,14 +198,26 @@ class ProductProductHandler(DomainHandler):
                             if 'product_product_combination_unique' in str(create_ex):
                                 dst_record = self._find_single_variant_for_template(data['product_tmpl_id'])
                                 if dst_record:
-                                    logging.info(
-                                        f"Updating {model_name} (dst_id={dst_record.id}, old_id={src_record.id}) ..."
+                                    _logger.info(
+                                        "Writing existing product.product after duplicate-combination error dst_id=%s src_id=%s default_code=%s",
+                                        getattr(dst_record, 'id', None),
+                                        getattr(src_record, 'id', None),
+                                        getattr(src_record, 'default_code', None),
                                     )
-                                    dst_record.write(data)
+                                    try:
+                                        existing_old_id = getattr(dst_record, 'x_old_id', None)
+                                    except Exception:
+                                        existing_old_id = None
+                                    if existing_old_id and existing_old_id != src_record.id:
+                                        vals.pop('x_old_id', None)
+                                    dst_record.write(vals)
                                     x_new_id = dst_record.id
                                 else:
-                                    logging.warning(
-                                        f"Skipping create for {model_name} old_id={src_record.id}: duplicate combination on template {data['product_tmpl_id']}"
+                                    _logger.warning(
+                                        "Skipping create for product.product due to duplicate combination src_id=%s default_code=%s product_tmpl_id=%s",
+                                        getattr(src_record, 'id', None),
+                                        getattr(src_record, 'default_code', None),
+                                        data.get('product_tmpl_id'),
                                     )
                                     continue
                             else:
@@ -192,26 +231,76 @@ class ProductProductHandler(DomainHandler):
                         dst_record = self.find_dst_product(src_record)
 
                     if not dst_record:
-                        logging.warning(
-                            f"Skipping update for {model_name} old_id={src_record.id}: destination record not found."
+                        _logger.warning(
+                            "Skipping update for product.product: destination record not found src_id=%s default_code=%s",
+                            getattr(src_record, 'id', None),
+                            getattr(src_record, 'default_code', None),
                         )
                         continue
 
-                    logging.info(
-                        f"Updating {model_name} (dst_id={dst_record.id}, old_id={src_record.id}) ..."
+                    _logger.info(
+                        "Writing product.product dst_id=%s src_id=%s default_code=%s",
+                        getattr(dst_record, 'id', None),
+                        getattr(src_record, 'id', None),
+                        getattr(src_record, 'default_code', None),
                     )
-                    dst_record.write(data)
+                    try:
+                        existing_old_id = getattr(dst_record, 'x_old_id', None)
+                    except Exception:
+                        existing_old_id = None
+                    if existing_old_id and existing_old_id != src_record.id:
+                        vals.pop('x_old_id', None)
+                    dst_record.write(vals)
                     x_new_id = dst_record.id
 
-                # Update tracking table (x_old_id -> new id).
-                self.update_tracking_ids(
-                    x_new_id=x_new_id,
-                    record=src_record
+                # Update tracking ids. For product variants, multiple source variants can
+                # collapse into the same destination variant; in that case, don't overwrite
+                # the destination x_old_id (it would become non-deterministic).
+                self._update_tracking_id(
+                    connection_type=SOURCE,
+                    model_name=self.src_model_name,
+                    field_name='x_new_id',
+                    field_value=x_new_id,
+                    record_id=src_record.id,
                 )
 
+                try:
+                    dst_old_id = getattr(dst_model.browse(x_new_id), 'x_old_id', None)
+                except Exception:
+                    dst_old_id = None
+
+                if not dst_old_id or dst_old_id == src_record.id:
+                    _logger.info(
+                        "Saving tracking mapping in DB for product.product: src_id=%s -> dst_id=%s (x_old_id)",
+                        getattr(src_record, 'id', None),
+                        x_new_id,
+                    )
+                    self._update_tracking_id(
+                        connection_type=DESTINATION,
+                        model_name=self.get_dst_model_name(),
+                        field_name='x_old_id',
+                        field_value=src_record.id,
+                        record_id=x_new_id,
+                    )
+                    _logger.info(
+                        "Saved tracking mapping in DB for product.product: src_id=%s -> dst_id=%s (x_old_id)",
+                        getattr(src_record, 'id', None),
+                        x_new_id,
+                    )
+                else:
+                    _logger.warning(
+                        "Not setting destination x_old_id for product.product dst_id=%s: already mapped to old_id=%s (skipping src_id=%s default_code=%s)",
+                        x_new_id,
+                        dst_old_id,
+                        getattr(src_record, 'id', None),
+                        getattr(src_record, 'default_code', None),
+                    )
+
             except Exception as e:
-                logging.exception(
-                    f"Error saving {model_name} old_id={getattr(src_record, 'id', None)} "
-                    f"default_code={getattr(src_record, 'default_code', None)}: {e}"
+                _logger.exception(
+                    "Error saving product.product src_id=%s default_code=%s: %s",
+                    getattr(src_record, 'id', None),
+                    getattr(src_record, 'default_code', None),
+                    e,
                 )
                 continue
