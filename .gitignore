@@ -1,5 +1,7 @@
 ### JetBrains template
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio
+__pycache__/
+migration.conf
 
 *.iml
 #*.log
@@ -141,9 +143,12 @@ output.json
 htmlcov/
 venv/
 .venv/
+profile.out
+
 
 backups/
 csv-db/
 non-used-addons/
 vroom/data/
 vroom/canada-latest.osm.pbf
+__pycache__/

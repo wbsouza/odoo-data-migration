@@ -15,6 +15,19 @@ This document describes the key schema and API changes between Odoo 11 and Odoo 
 | `website_meta_description` | `website_meta_description` | Same |
 | `website_meta_keywords` | `website_meta_keywords` | Same |
 
+`default_code` authority rule:
+
+- For **non-variant products** (single `product.product` and no attribute lines), the canonical code is `product.template.default_code`.
+- For **variant products** (template has attribute lines or multiple variants), the canonical code is `product.product.default_code`.
+
+This project may normalize source data so that codes follow this rule before migration.
+
+Pricing notes:
+
+- Base sale price is stored on `product.template.list_price` in both versions.
+- Variant price differences are expressed via attribute-related pricing (see `product.attribute.price` below).
+- Per-variant base prices are not a standard Odoo concept; do not assume or guess addon-specific fields on `product.product`.
+
 **Transformation applied:**
 ```python
 'detailed_type': src_record.type,  # 'type' → 'detailed_type'
@@ -27,6 +40,11 @@ This document describes the key schema and API changes between Odoo 11 and Odoo 
 | `product_tmpl_id` | `product_tmpl_id` | Same |
 | `default_code` | `default_code` | Same |
 | `active` | `active` | Same |
+
+`default_code` authority rule:
+
+- For **variant products**, code is stored on `product.product.default_code`.
+- For **non-variant products**, code is stored on `product.template.default_code` and the single `product.product.default_code` may be kept in sync.
 
 **Key constraint in Odoo 17:**
 - `product_product_combination_unique`: Variants are uniquely identified by `(product_tmpl_id, combination_indices)`
@@ -47,6 +65,10 @@ This document describes the key schema and API changes between Odoo 11 and Odoo 
 This model **does not exist** in Odoo 17. Attribute pricing is now handled differently:
 - Odoo 17 uses `product.template.attribute.value` with `price_extra` field
 - Migration must transform price data to the new structure
+
+Project note:
+
+- This project keeps the existing plus-price addon behavior; field mapping for plus pricing must match the target deployment.
 
 ## Account/Invoice Models
 

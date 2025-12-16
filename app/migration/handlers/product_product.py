@@ -29,6 +29,46 @@ class ProductProductHandler(DomainHandler):
         self._dst_variant_key_cache: Dict[int, Dict[str, int]] = {}
         self._src_pav_to_dst_pav_cache: Dict[int, Optional[int]] = {}
         self._src_attribute_value_ids_cache: Dict[int, List[int]] = {}
+        self._dst_product_product_fields_cache: Optional[Dict[str, Any]] = None
+
+    def _dst_product_product_fields(self) -> Dict[str, Any]:
+        if self._dst_product_product_fields_cache is not None:
+            return self._dst_product_product_fields_cache
+        try:
+            self._dst_product_product_fields_cache = self.get_dst_model('product.product').fields_get() or {}
+        except Exception:
+            self._dst_product_product_fields_cache = {}
+        return self._dst_product_product_fields_cache
+
+    def _dst_product_has_field(self, field_name: str) -> bool:
+        return field_name in (self._dst_product_product_fields() or {})
+
+    def _src_variant_base_price(self, src_record: Any) -> Optional[float]:
+        """Return a base price for the variant from source.
+
+        We prefer variant-level values if present (common in customizations), otherwise fall back to
+        the template list_price.
+        """
+        try:
+            val = getattr(src_record, 'lst_price')
+            if val is not None:
+                return float(val)
+        except Exception:
+            pass
+        try:
+            val = getattr(src_record, 'list_price')
+            if val is not None:
+                return float(val)
+        except Exception:
+            pass
+        try:
+            tmpl = getattr(src_record, 'product_tmpl_id', None)
+            val = getattr(tmpl, 'list_price', None) if tmpl else None
+            if val is not None:
+                return float(val)
+        except Exception:
+            pass
+        return None
 
     def _dst_model_including_archived(self, model_name: str = 'product.product'):
         # Include both active and archived records in searches/updates.
@@ -293,7 +333,7 @@ class ProductProductHandler(DomainHandler):
                 )
 
 
-        data = {
+        data: Dict[str, Any] = {
             # Required for create
             'product_tmpl_id': dst_product_tmpl_id,
 

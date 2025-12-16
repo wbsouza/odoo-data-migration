@@ -114,6 +114,33 @@ cd app
 python main.py
 ```
 
+## Using `psql` with the configured credentials
+
+Database credentials are defined in `app/migration.conf` under `[source]` and `[destination]`.
+
+Example (source DB):
+
+```bash
+PGPASSWORD=odoo psql -h localhost -p 5432 -U odoo -d oprod
+```
+
+Example (destination DB):
+
+```bash
+PGPASSWORD=odoo psql -h localhost -p 5432 -U odoo -d dq17
+```
+
+Use the values from your local `app/migration.conf` if they differ.
+
+## Running helper Python scripts
+
+If you add one-off helper scripts (for audits, pre-checks, etc.), run them inside the project virtual environment:
+
+```bash
+source .venv/bin/activate
+python your_script.py
+```
+
 ### Logs
 
 Logs are written to:

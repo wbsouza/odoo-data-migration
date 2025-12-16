@@ -32,6 +32,48 @@ Only the following model migrations may be modified:
 
 **Do not modify migrations for other models** unless explicitly requested.
 
+## Product Code (`default_code`) Authority Rule
+
+Odoo models the product domain like class inheritance at the database level:
+
+- `product.template` is the base record (shared fields)
+- `product.product` is the specialized record (variant-specific fields)
+
+For migration, audits, and any data-prep scripts, `default_code` must follow this rule:
+
+- For **non-variant products** (single variant and no attribute lines), the canonical code is `product.template.default_code`.
+- For **variant products** (template has attribute lines or has multiple variants), the canonical code is `product.product.default_code`.
+
+Classification (Odoo 11 source):
+
+- A template is considered **variant** if:
+  - it has at least one `product_attribute_line` for the template, OR
+  - it has more than one `product_product` row.
+- Otherwise it is considered **non-variant**.
+
+Implications:
+
+- Data-prep must not create duplicate `product.product.default_code` values if the source DB has a uniqueness constraint.
+- For variant templates, the migration should not depend on `product.template.default_code` being populated.
+- For non-variant templates, the migration should keep `product.template.default_code` populated and may keep `product.product.default_code` consistent with it.
+
+## Product Pricing Rules
+
+### Base price (`list_price`) authority
+
+- The canonical **base sale price** is `product.template.list_price`.
+- `product.product` does not store a canonical base price in standard Odoo; variant pricing is derived from the template plus variant adjustments.
+
+### Variant pricing adjustments
+
+- Odoo 11 `product.attribute.price` represents **variant adjustments** (e.g. plus/multiple), not the template base price.
+- This project must keep the existing **plus-price addon** behavior. Do not remove or rename fields used by that addon.
+
+### Avoid guessing custom fields
+
+- Do not write to custom or addon-specific per-variant price fields on `product.product` unless explicitly requested and confirmed as the field used by the target deployment.
+- If per-variant base prices must be preserved in Odoo 17, the correct approach must be agreed first (e.g., a specific custom field used by a known addon, or `product.pricelist.item` rules).
+
 ## Logging Requirements
 
 All handlers must include comprehensive logging:

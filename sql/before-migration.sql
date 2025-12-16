@@ -1,8 +1,9 @@
 BEGIN;
 
--- change the product_id
+-- exchange the product_id from account_invoice_line
 UPDATE account_invoice_line SET product_id = 10185 WHERE product_id = 102656;
 UPDATE account_invoice_line SET product_id = 10153 WHERE product_id = 2444;
+update account_invoice_line set product_id = 10185 where product_id = 2441;
 UPDATE account_invoice_line SET product_id = 10164 WHERE product_id = 2456;
 UPDATE account_invoice_line SET product_id = 10131 WHERE product_id = 10211;
 
@@ -38,6 +39,20 @@ WHERE pt.id = pp.product_tmpl_id
       GROUP BY product_tmpl_id
       HAVING COUNT(*) > 1
     )
+  )
+  AND pp.id = (
+    SELECT pp2.id
+    FROM product_product pp2
+    WHERE pp2.product_tmpl_id = pt.id
+      AND COALESCE(BTRIM(pp2.default_code), '') = ''
+    ORDER BY pp2.id
+    LIMIT 1
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM product_product pp3
+    WHERE pp3.id <> pp.id
+      AND pp3.default_code = pt.default_code
   );
 
 
@@ -117,7 +132,13 @@ SET default_code = nvp.template_default_code
 FROM non_variant_pairs nvp
 WHERE pp.id = nvp.product_product_id
   AND COALESCE(BTRIM(nvp.template_default_code), '') <> ''
-  AND COALESCE(BTRIM(pp.default_code), '') <> BTRIM(nvp.template_default_code);
+  AND COALESCE(BTRIM(pp.default_code), '') <> BTRIM(nvp.template_default_code)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM product_product pp2
+    WHERE pp2.id <> pp.id
+      AND pp2.default_code = nvp.template_default_code
+  );
 
 WITH candidate_products AS (
     SELECT pp.id AS product_product_id,
