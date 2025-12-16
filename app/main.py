@@ -1,7 +1,10 @@
 import configparser
 import os
 import logging
-from migration.executor import Migration
+try:
+    from migration.executor import Migration
+except ModuleNotFoundError:
+    from app.migration.executor import Migration
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -23,20 +26,23 @@ def setup_logging(configs: configparser.ConfigParser):
     # Setup logging from config
     log_file = configs.get('settings', 'log_file', fallback='./logs/migration.log')
     log_level = configs.get('settings', 'log_level', fallback='info').upper()
-    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    level = getattr(logging, log_level, logging.INFO)
+    if not os.path.isabs(log_file):
+        log_file = os.path.abspath(os.path.join(_BASE_DIR, log_file))
+    os.makedirs(os.path.dirname(log_file) or '.', exist_ok=True)
     logging.basicConfig(
         filename=log_file,
-        level=getattr(logging, log_level, logging.INFO),
+        level=level,
         format='%(asctime)s %(levelname)s %(message)s',
     )
 
     # Create a file handler
     file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(log_level)
+    file_handler.setLevel(level)
 
     # Create a console handler
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(log_level)
+    console_handler.setLevel(level)
 
     # Set up logging format
     formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
@@ -45,7 +51,7 @@ def setup_logging(configs: configparser.ConfigParser):
 
     # Get the root logger
     logger = logging.getLogger()
-    logger.setLevel(log_level)
+    logger.setLevel(level)
 
     # Add handlers to the logger
     logger.addHandler(file_handler)

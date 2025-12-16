@@ -1,6 +1,6 @@
 from typing import Dict, Generic, List, Optional, Type, TypeVar, Union, Any
 
-from .base import DomainHandler, ResourceNotFoundException
+from .base import DomainHandler, ResourceNotFoundException, DESTINATION
 from ..core.mapping import MappingProvider
 from ..core.odoo_connection import OdooConnection
 
@@ -56,7 +56,7 @@ class ResGroupsHandler(DomainHandler):
         :param group_name: The name of the group in the source system.
         :return: True if the group exists, False otherwise.
         """
-        group_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env['res.groups']
+        group_model = self._odoo_provider.get_odoo_connection(DESTINATION).get_model('res.groups')
         domain = [('name->>' + self.language, '=', group_name)]
         return bool(group_model.search(domain, limit=1))
 
@@ -100,7 +100,7 @@ class ResGroupsHandler(DomainHandler):
                 continue
 
             # Destination model handling is specific to this handler, no generic method
-            destination_model = self._odoo_provider.get_odoo_connection(DESTINATION).session.env[model_name]
+            destination_model = self._odoo_provider.get_odoo_connection(DESTINATION).get_model(model_name)
 
             # Create the record in the appropriate model/table
             x_new_id = destination_model.create(data)

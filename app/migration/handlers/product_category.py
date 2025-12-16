@@ -36,7 +36,7 @@ class ProductCategoryHandler(DomainHandler):
     def find_category_by_name(self, name) -> bool:
         domain = [('name', '=', name)]
         odoo_dst = self._odoo_provider.get_odoo_connection(DESTINATION)
-        model = odoo_dst.session.env[self.src_model_name]
+        model = odoo_dst.get_model(self.src_model_name)
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -45,7 +45,7 @@ class ProductCategoryHandler(DomainHandler):
     def find_dst_parent_by_old_name(self, name):
         domain = [('name', '=', name)]
         odoo_dst = self._odoo_provider.get_odoo_connection(DESTINATION)
-        model = odoo_dst.session.env[self.src_model_name]
+        model = odoo_dst.get_model(self.src_model_name)
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]

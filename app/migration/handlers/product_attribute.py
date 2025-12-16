@@ -45,7 +45,7 @@ class ProductAttributeHandler(DomainHandler):
     def find_dst_attribute(self, record):
         domain = [('name', '=', record.attribute_id.name)]
         odoo_dst = self._odoo_provider.get_odoo_connection(DESTINATION)
-        model = odoo_dst.session.env['product.attribute']
+        model = odoo_dst.get_model('product.attribute')
         attribute_id = model.search(domain)
         attribute = model.browse(attribute_id[0])
         return attribute
@@ -53,25 +53,31 @@ class ProductAttributeHandler(DomainHandler):
     def find_product_attribute_by_name(self, name: str) -> bool:
         domain = [('name', '=', name)]
         odoo_dst = self._odoo_provider.get_odoo_connection(DESTINATION)
-        model = odoo_dst.session.env[self.src_model_name]
+        model = odoo_dst.get_model(self.src_model_name)
+        logging.info(f"Searching destination product.attribute with domain={domain}")
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
+            logging.info(f"Found destination product.attribute id={ids[0]} for name={name}")
             return model.browse(ids[0])[0]
+        logging.info(f"No destination product.attribute found for name={name}")
         return None
 
     def get_src_model(self, model_name: str = None) -> Any:
         if model_name is None:
             model_name = self.src_model_name
         odoo_conn = self._odoo_provider.get_odoo_connection(SOURCE)
-        return odoo_conn.session.env[model_name]
+        return odoo_conn.get_model(model_name)
 
     def get_dst_model(self, model_name: str = None) -> Any:
         if model_name is None:
             model_name = self.get_dst_model_name()
         odoo_conn = self._odoo_provider.get_odoo_connection(DESTINATION)
-        return odoo_conn.session.env[model_name]
+        return odoo_conn.get_model(model_name)
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
+        logging.info(
+            f"Processing product.attribute src_id={src_record.id} name={src_record.name} create_variant={src_record.create_variant}"
+        )
         transformed_record = {
             'action': 'create',
             'model': 'product.attribute',
@@ -90,6 +96,10 @@ class ProductAttributeHandler(DomainHandler):
         # already exists ...
         if transformed_record['dst_record'] is not None:
             transformed_record['action'] = 'update'
+
+        logging.info(
+            f"Prepared product.attribute action={transformed_record['action']} src_id={src_record.id} dst_id={transformed_record['dst_record'].id if transformed_record['dst_record'] else None}"
+        )
 
         return [transformed_record]
 

@@ -36,7 +36,7 @@ class DomainHandler:
         if model_name is None:
             model_name = self.src_model_name
         odoo_conn = self._odoo_provider.get_odoo_connection(SOURCE)
-        return odoo_conn.session.env[model_name].with_context(active_test=False)
+        return odoo_conn.get_model(model_name)
 
     def get_dst_model_name(self) -> Any:
         return self.src_model_name
@@ -45,18 +45,18 @@ class DomainHandler:
         if model_name is None:
             model_name = self.get_dst_model_name()
         odoo_conn = self._odoo_provider.get_odoo_connection(DESTINATION)
-        return odoo_conn.session.env[model_name].with_context(active_test=False)
+        return odoo_conn.get_model(model_name)
 
     @staticmethod
     def record_exists(odoo: OdooConnection, model_name: str, field: str, value: str) -> bool:
-        model = odoo.session.env[model_name]
+        model = odoo.get_model(model_name)
         domain = [(field, '=', value)]
         return bool(model.search(domain, limit=1))
 
     @staticmethod
     def get_item(odoo: OdooConnection, model_name: str, _id: int) -> Dict:
         try:
-            model = odoo.session.env[model_name]
+            model = odoo.get_model(model_name)
             resp = model.browse(_id).read()[0]  # Ensure record is read and returned as a dict
             record = dict({key: value for key, value in resp.items() if value is not None})
             return record

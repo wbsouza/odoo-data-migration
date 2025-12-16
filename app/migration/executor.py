@@ -1,4 +1,5 @@
 import logging
+import os
 
 import traceback
 from configparser import ConfigParser
@@ -23,6 +24,43 @@ from .core.database import create_tracking_fields
 
 _logger = logging.getLogger(__name__)
 
+
+def ensure_logging_configured(configs: ConfigParser) -> None:
+    log_file = configs.get('settings', 'log_file', fallback='./logs/migration.log')
+    log_level_name = configs.get('settings', 'log_level', fallback='info').upper()
+    level = getattr(logging, log_level_name, logging.INFO)
+
+    if not os.path.isabs(log_file):
+        app_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+        log_file = os.path.abspath(os.path.join(app_dir, log_file))
+
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    fmt = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+
+    log_file_abs = os.path.abspath(log_file)
+    has_file_handler = any(
+        isinstance(h, logging.FileHandler) and os.path.abspath(getattr(h, 'baseFilename', '')) == log_file_abs
+        for h in root.handlers
+    )
+    if not has_file_handler:
+        os.makedirs(os.path.dirname(log_file) or '.', exist_ok=True)
+        fh = logging.FileHandler(log_file)
+        fh.setLevel(level)
+        fh.setFormatter(fmt)
+        root.addHandler(fh)
+
+    has_console_handler = any(
+        isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler)
+        for h in root.handlers
+    )
+    if not has_console_handler:
+        sh = logging.StreamHandler()
+        sh.setLevel(level)
+        sh.setFormatter(fmt)
+        root.addHandler(sh)
+
 class Migration:
 
     def __init__(self, configs: ConfigParser, mappings_dir: str):
@@ -34,18 +72,19 @@ class Migration:
         :param mappings_dir: Mappings directory.
         """
         self._configs = configs
+        ensure_logging_configured(self._configs)
         self._odoo_provider = OdooConnectionProvider(configs)
         self._db_provider = DBConnectionProvider(configs)
         self._mappings_provider = MappingProvider(configs, self._odoo_provider, mappings_dir)
         self._mappings_provider.load_mappings_from_database("res.groups", "name")
         create_tracking_fields(self._configs)
         self.models_to_migrate = [
-            # 'product.category',
-            # 'product.template',
-            # 'product.attribute',
-            # 'product.attribute.value',
-            # 'product.attribute.line',
-            # 'product.attribute.price',
+            'product.category',
+            'product.template',
+            'product.attribute',
+            'product.attribute.value',
+            'product.attribute.line',
+            'product.attribute.price',
             'product.product',
             # 'res.partner',
             # 'res.partner.parent',  # Second phase for parent_id relationships
@@ -83,7 +122,7 @@ class Migration:
 
             # Fetch records from the source system
             eof = False
-            offset = 0
+            last_id = 0
             batch_size = 500
             while not eof:
 
@@ -94,31 +133,35 @@ class Migration:
                 if model_name == 'res.partner.parent':
                     source_model_name = 'res.partner'
                 # Odoo 11 source model for invoices is 'account.invoice'
+
+                # IMPORTANT: initialize domain per-batch so filters never leak and variable is always defined
+                domain = []
+
                 if model_name == 'account.move':
                     source_model_name = 'account.invoice'
-
-                domain = None
-
-                if model_name == 'product.attribute.value':
-                    domain = []
-
-                if model_name == 'account.move':
                     # Odoo 11 account.invoice: exclude draft invoices
                     domain = [('type', '=', 'out_invoice'), ('state', '!=', 'draft')]
                 # elif model_name == 'account.payment':
                 #     # Migrate only confirmed payments to guarantee correctness of associations
                 #     domain = [('state', '!=', 'draft')]
 
+                # IMPORTANT: reset domain per-batch to avoid leaking constraints across batches/models
+                if model_name == 'product.attribute.value':
+                    domain = []
+
+
+                paged_domain = list(domain)
+                paged_domain.append(('id', '>', last_id))
+
                 records = handler.fetch_items(
                     odoo=src_odoo,
                     model_name=source_model_name,
-                    domain=domain,
-                    offset=offset,
+                    domain=paged_domain,
                     limit=batch_size,
                     order="id"
                 )
 
-                eof = records is not None and len(records) < 1
+                eof = len(records) < 1
                 if not eof:
                     _logger.info(f"Fetched {len(records)} records for {model_name}. Applying transformations...")
                     # Apply transformations
@@ -130,7 +173,12 @@ class Migration:
 
                     # Insert transformed records into the destination
                     handler.save_into_destination(transformed_records)
-                offset += batch_size
+
+                    last = records[-1]
+                    if isinstance(last, dict):
+                        last_id = last['id']
+                    else:
+                        last_id = last.id
 
             _logger.info(f"Migration complete for {model_name}.")
         except ResourceNotFoundException as e:

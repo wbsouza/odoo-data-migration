@@ -51,20 +51,22 @@ class OdooConnection:
         if not self.session:
             raise Exception(f"Connection to {self._connection_type} Odoo instance is not established.")
         try:
-            return self.session.env[model_name]
+            # Always include archived/inactive records to avoid missing data during migration.
+            # Individual handlers can still override behavior by applying a different context.
+            return self.session.env[model_name].with_context(active_test=False)
         except Exception as e:
             _logger.error(f"Failed to retrieve model '{model_name}': {e}")
             raise e
 
     def search_by_field(self, model_name: str, field_name: str, value, limit: int = 1):
-        model = self.session.env[model_name]
+        model = self.get_model(model_name)
         domain = [(field_name, '=', value)]
         return model.search(domain, limit=limit)
 
     def fetch_ids(self, model_name: str, domain=None, offset: int = 0, order: str = None,
                   limit: int = 100) -> List[Dict]:
         domain = [] if domain is None else domain
-        model = self.session.env[model_name]
+        model = self.get_model(model_name)
         ids = model.search(domain, offset=offset, limit=limit, order=order)
         return ids
 
@@ -84,7 +86,7 @@ class OdooConnection:
 
         ids = self.fetch_ids(model_name, domain=domain, offset=offset, order=order, limit=limit)
         for item_id in ids:
-            model = self.session.env[model_name]
+            model = self.get_model(model_name)
             item = model.browse(item_id)
             result.append(item)
         return result

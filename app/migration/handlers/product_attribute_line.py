@@ -4,7 +4,7 @@ from .base import DomainHandler, ResourceNotFoundException
 from ..core.mapping import MappingProvider
 from ..core.mapping import MappingProvider
 from ..core.odoo_connection import OdooConnectionProvider, SOURCE, DESTINATION
-from ..core.database import DBConnectionProvider
+from ..core.database import DBConnectionProvider, find_id_by_old_id
 
 class ProductAttributeLineHandler(DomainHandler):
 
@@ -44,33 +44,73 @@ class ProductAttributeLineHandler(DomainHandler):
         return None
 
     def find_dst_product_tmpl(self, record):
-        # Support dict records from optimized fetch: product_tmpl_id -> [id, name]
-        pt_field = record.get('product_tmpl_id') if isinstance(record, dict) else None
-        pt_name = pt_field[1] if pt_field and len(pt_field) > 1 else (record.product_tmpl_id.name if hasattr(record, 'product_tmpl_id') else None)
-        model = self._odoo_dst.session.env['product.template']
-        ids = model.search([('name', '=', pt_name)], limit=1)
-        return model.browse(ids[0]) if ids else None
+        # Resolve destination template by x_old_id mapping (do NOT rely on names).
+        if isinstance(record, dict):
+            pt_field = record.get('product_tmpl_id')
+            src_pt_id = pt_field[0] if pt_field and len(pt_field) > 0 else None
+        else:
+            src_pt_id = record.product_tmpl_id.id
+
+        if not src_pt_id:
+            logging.warning("product.attribute.line: missing src product_tmpl_id in record=%s", record)
+            return None
+
+        conn = self._db_provider.get_connection(DESTINATION)
+        dst_pt_id = find_id_by_old_id(conn, 'product_template', src_pt_id)
+        if not dst_pt_id:
+            logging.warning(
+                "product.attribute.line: no destination product.template mapping for src_pt_id=%s",
+                src_pt_id,
+            )
+            return None
+
+        model = self._odoo_dst.get_model('product.template')
+        logging.info(
+            "product.attribute.line: resolved template mapping src_pt_id=%s -> dst_pt_id=%s",
+            src_pt_id,
+            dst_pt_id,
+        )
+        return model.browse(dst_pt_id)
 
     def find_dst_attribute(self, record):
-        # Support dict records from optimized fetch: attribute_id -> [id, name]
-        attr_field = record.get('attribute_id') if isinstance(record, dict) else None
-        attr_name = attr_field[1] if attr_field and len(attr_field) > 1 else (record.attribute_id.name if hasattr(record, 'attribute_id') else None)
-        model = self._odoo_dst.session.env['product.attribute']
-        ids = model.search([('name', '=', attr_name)], limit=1)
-        if not ids and attr_name:
-            ids = model.search([('name', 'ilike', attr_name)], limit=1)
-        return model.browse(ids[0]) if ids else None
+        # Resolve destination attribute by x_old_id mapping (do NOT rely on names).
+        if isinstance(record, dict):
+            attr_field = record.get('attribute_id')
+            src_attr_id = attr_field[0] if attr_field and len(attr_field) > 0 else None
+        else:
+            src_attr_id = record.attribute_id.id
+
+        if not src_attr_id:
+            logging.warning("product.attribute.line: missing src attribute_id in record=%s", record)
+            return None
+
+        conn = self._db_provider.get_connection(DESTINATION)
+        dst_attr_id = find_id_by_old_id(conn, 'product_attribute', src_attr_id)
+        if not dst_attr_id:
+            logging.warning(
+                "product.attribute.line: no destination product.attribute mapping for src_attr_id=%s",
+                src_attr_id,
+            )
+            return None
+
+        model = self._odoo_dst.get_model('product.attribute')
+        logging.info(
+            "product.attribute.line: resolved attribute mapping src_attr_id=%s -> dst_attr_id=%s",
+            src_attr_id,
+            dst_attr_id,
+        )
+        return model.browse(dst_attr_id)
 
     def find_attribute_values(self, attribute):
         domain = [('attribute_id', '=', attribute.id)]
-        model = self._odoo_dst.session.env['product.attribute.value']
+        model = self._odoo_dst.get_model('product.attribute.value')
         attribute_values = model.search(domain)
         return attribute_values
 
     def find_dst_attribute_line_by_attribute_and_product_tmpl(self, attribute, product_tmpl) -> bool:
         domain = ['&', ('attribute_id', '=', attribute.id),
                       ('product_tmpl_id', '=', product_tmpl.id),]
-        model = self._odoo_dst.session.env['product.template.attribute.line']
+        model = self._odoo_dst.get_model('product.template.attribute.line')
         ids = model.search(domain, limit=1)
         if ids is not None and len(ids):
             return model.browse(ids[0])[0]
@@ -78,7 +118,7 @@ class ProductAttributeLineHandler(DomainHandler):
 
     def find_dst_product_by_product_tmpl(self, product_tmpl_id: int) -> bool:
         domain = [('product_tmpl_id', '=', product_tmpl_id)]
-        model = self._odoo_dst.session.env['product.product']
+        model = self._odoo_dst.get_model('product.product')
         ids = model.search(domain, order='id desc')
         if ids is not None and len(ids):
             return ids
@@ -86,7 +126,7 @@ class ProductAttributeLineHandler(DomainHandler):
 
     def find_src_product_by_product_tmpl(self, product_tmpl_id: int) -> bool:
         domain = [('product_tmpl_id', '=', product_tmpl_id)]
-        model = self._odoo_src.session.env['product.product']
+        model = self._odoo_src.get_model('product.product')
         ids = model.search(domain, order='id desc')
         if ids is not None and len(ids):
             return ids
@@ -105,9 +145,13 @@ class ProductAttributeLineHandler(DomainHandler):
         src_attr_id = src_attr_field[0] if src_attr_field else None
 
         # Find all existing product.product variants in Odoo 11 for this template (IDs only)
-        pp_model = self._odoo_src.session.env['product.product']
+        pp_model = self._odoo_src.get_model('product.product')
         src_product_ids = pp_model.search([('product_tmpl_id', '=', src_pt_id)])
         if not src_product_ids:
+            logging.warning(
+                "product.attribute.line: no source variants found for src_pt_id=%s",
+                src_pt_id,
+            )
             return []
 
         # Read only attribute_value_ids from variants
@@ -119,10 +163,14 @@ class ProductAttributeLineHandler(DomainHandler):
                 value_id_set.add(vid)
 
         if not value_id_set:
+            logging.warning(
+                "product.attribute.line: variants for src_pt_id=%s have no attribute_value_ids",
+                src_pt_id,
+            )
             return []
 
         # Read attribute values to filter by the specific attribute
-        pav_model = self._odoo_src.session.env['product.attribute.value']
+        pav_model = self._odoo_src.get_model('product.attribute.value')
         pav_rows = pav_model.read(list(value_id_set), ['attribute_id', 'name'])
         used_value_names = set()
         for pav in pav_rows:
@@ -135,11 +183,17 @@ class ProductAttributeLineHandler(DomainHandler):
 
         # Find corresponding values in destination Odoo 17
         dst_attribute = self.find_dst_attribute(src_record)
+        if not dst_attribute:
+            logging.warning(
+                "product.attribute.line: cannot resolve destination attribute for src_record id=%s; skipping line",
+                src_record.get('id'),
+            )
+            return []
         dst_value_ids = []
 
         for value_name in used_value_names:
             domain = [('attribute_id', '=', dst_attribute.id), ('name', '=', value_name)]
-            dst_value_ids_found = self._odoo_dst.session.env['product.attribute.value'].search(domain, limit=1)
+            dst_value_ids_found = self._odoo_dst.get_model('product.attribute.value').search(domain, limit=1)
             if dst_value_ids_found:
                 dst_value_ids.append(dst_value_ids_found[0])
 
@@ -156,17 +210,14 @@ class ProductAttributeLineHandler(DomainHandler):
         This implementation avoids recordset browse() and uses read() with minimal fields
         to prevent RPC timeouts when accessing relational fields like attribute_value_ids.
         """
-        src_env = self._odoo_src.session.env
-        dst_env = self._odoo_dst.session.env
-
         # Read product_tmpl_id from source attribute line without dereferencing relations
-        line_rows = src_env['product.attribute.line'].read([src_record.id], ['product_tmpl_id'])
+        line_rows = self._odoo_src.get_model('product.attribute.line').read([src_record.id], ['product_tmpl_id'])
         if not line_rows:
             return
         src_pt_id = line_rows[0]['product_tmpl_id'][0]
 
         # Source variants: ids only, then minimal fields
-        src_pp = src_env['product.product']
+        src_pp = self._odoo_src.get_model('product.product')
         src_variant_ids = src_pp.search([('product_tmpl_id', '=', src_pt_id)])
         if not src_variant_ids:
             return
@@ -179,14 +230,14 @@ class ProductAttributeLineHandler(DomainHandler):
                 all_pav_ids.add(vid)
         pav_cache = {}
         if all_pav_ids:
-            pav_rows = src_env['product.attribute.value'].read(list(all_pav_ids), ['attribute_id', 'name'])
+            pav_rows = self._odoo_src.get_model('product.attribute.value').read(list(all_pav_ids), ['attribute_id', 'name'])
             for r in pav_rows:
                 attr = r.get('attribute_id')
                 attr_name = attr[1] if attr and len(attr) > 1 else ''
                 pav_cache[r['id']] = (attr_name, r.get('name') or '')
 
         # Destination variants: ids only, then minimal fields
-        dst_pp = dst_env['product.product']
+        dst_pp = self._odoo_dst.get_model('product.product')
         dst_variant_ids = dst_pp.search([('product_tmpl_id', '=', dst_template_id)])
         if not dst_variant_ids:
             return
@@ -199,7 +250,7 @@ class ProductAttributeLineHandler(DomainHandler):
                 all_ptav_ids.add(vid)
         ptav_cache = {}
         if all_ptav_ids:
-            ptav_rows = dst_env['product.template.attribute.value'].read(list(all_ptav_ids), ['attribute_id', 'product_attribute_value_id'])
+            ptav_rows = self._odoo_dst.get_model('product.template.attribute.value').read(list(all_ptav_ids), ['attribute_id', 'product_attribute_value_id'])
             for r in ptav_rows:
                 attr = r.get('attribute_id')
                 pav = r.get('product_attribute_value_id')
@@ -275,6 +326,16 @@ class ProductAttributeLineHandler(DomainHandler):
         # Get only the specific attribute values used in existing Odoo 11 variants
         values_ids = self.get_specific_attribute_values_for_template(src_record)
         product_tmpl = self.find_dst_product_tmpl(src_record)
+
+        if not product_tmpl:
+            pt_field = src_record.get('product_tmpl_id')
+            pt_name = pt_field[1] if pt_field and len(pt_field) > 1 else 'unknown'
+            logging.warning(
+                "product.attribute.line: cannot resolve destination template for src_line_id=%s template=%s; skipping",
+                src_record.get('id'),
+                pt_name,
+            )
+            return []
         
         # Skip if no specific values found (prevents empty attribute lines)
         if not values_ids:
@@ -301,6 +362,16 @@ class ProductAttributeLineHandler(DomainHandler):
         if transformed_record['dst_record'] is not None:
             transformed_record['action'] = 'update'
 
+        logging.info(
+            "Prepared product.template.attribute.line action=%s src_line_id=%s dst_line_id=%s dst_template_id=%s dst_attribute_id=%s value_count=%s",
+            transformed_record['action'],
+            src_record.get('id'),
+            transformed_record['dst_record'].id if transformed_record['dst_record'] is not None else None,
+            product_tmpl.id,
+            dst_attribute.id,
+            len(values_ids),
+        )
+
         return [transformed_record]
 
     def save_into_destination(self, transformed_records: List[Dict]):
@@ -312,16 +383,21 @@ class ProductAttributeLineHandler(DomainHandler):
 
             data = record['data']
             action = record['action']
-            src_model = self._odoo_src.session.env[self.src_model_name]
+            src_model = self._odoo_src.get_model(self.src_model_name)
 
             if 'x_old_id' in data:
                 x_old_id = data.pop('x_old_id')
                 src_record = src_model.browse(x_old_id)
-                dst_model = self._odoo_dst.session.env[self.get_dst_model_name()]
+                dst_model = self._odoo_dst.get_model(self.get_dst_model_name())
 
                 if action == 'create':
                     logging.info(f"Creating attribute line \"{src_record.product_tmpl_id.name, src_record.attribute_id.name}\" ...")
                     x_new_id = dst_model.create(data)
+                    logging.info(
+                        "Created product.template.attribute.line dst_id=%s src_id=%s",
+                        x_new_id,
+                        src_record.id,
+                    )
                     self.update_tracking_ids(x_new_id, src_record)
                     
                     # After creating attribute line, sync variant default codes
@@ -332,6 +408,11 @@ class ProductAttributeLineHandler(DomainHandler):
                     logging.info(f"Updating attribute line \"{src_record.product_tmpl_id.name, src_record.attribute_id.name}\" ...")
                     dst_record = record['dst_record']
                     dst_record.write(data)
+                    logging.info(
+                        "Updated product.template.attribute.line dst_id=%s src_id=%s",
+                        dst_record.id,
+                        src_record.id,
+                    )
                     self.update_tracking_ids(dst_record.id, src_record)
                     
                     # After updating attribute line, sync variant default codes
