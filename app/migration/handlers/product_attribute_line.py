@@ -8,26 +8,10 @@ from ..core.database import DBConnectionProvider, find_id_by_old_id
 
 class ProductAttributeLineHandler(DomainHandler):
 
-    def __init__(
-            self,
-            odoo_provider: OdooConnectionProvider,
-            db_provider: DBConnectionProvider,
-            model_name: str
-    ):
-        """
-        Initialize the ProductAttributeValueHandler with the provider pattern.
-        :param odoo_provider: OdooConnectionProvider instance.
-        :param db_provider: DBConnectionProvider instance.
-        :param model_name: The model name to migrate.
-        """
-        super().__init__(odoo_provider, db_provider, model_name)
-        self._odoo_src = odoo_provider.get_odoo_connection(SOURCE)
-        self._odoo_dst = odoo_provider.get_odoo_connection(DESTINATION)
-
-    # overriding the get_dst_model_name method
     def get_dst_model_name(self) -> str:
         return 'product.template.attribute.line'
 
+    # overriding the get_dst_model_name method
     def find_dest_group_id(self, src_group: Any) -> Optional[int]:
         """
         Find the matching category ID in the destination Odoo (Odoo 16) based on the source category ID from Odoo 11.
@@ -42,6 +26,25 @@ class ProductAttributeLineHandler(DomainHandler):
             if resp is not None and len(resp) > 0:
                 return resp[0]
         return None
+
+    def __init__(
+            self,
+            odoo_provider: OdooConnectionProvider,
+            db_provider: DBConnectionProvider,
+            model_name: str,
+            fields: List[str],
+
+    ):
+        """
+        Initialize the ProductAttributeValueHandler with the provider pattern.
+        :param odoo_provider: OdooConnectionProvider instance.
+        :param db_provider: DBConnectionProvider instance.
+        :param model_name: The model name to migrate.
+        """
+        super().__init__(odoo_provider, db_provider, model_name)
+        self._odoo_src = odoo_provider.get_odoo_connection(SOURCE)
+        self._odoo_dst = odoo_provider.get_odoo_connection(DESTINATION)
+        self.fields = fields
 
     def find_dst_product_tmpl(self, record):
         # Resolve destination template by x_old_id mapping (do NOT rely on names).

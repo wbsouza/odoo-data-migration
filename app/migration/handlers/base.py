@@ -31,6 +31,7 @@ class DomainHandler:
         self._odoo_provider = odoo_provider
         self._db_provider = db_provider
         self.src_model_name = model_name
+        self.fields = None
 
     def get_src_model(self, model_name: str = None) -> Any:
         if model_name is None:
@@ -70,39 +71,18 @@ class DomainHandler:
         model = self.get_src_model(model_name)
         ids = model.search(domain, offset=offset, limit=limit, order=order)
 
-        # Fast path for product.attribute.value to avoid heavy browse() prefetch causing timeouts
-        if model_name == 'product.attribute.value':
-            if not ids:
+        def _fast_read(_ids: List[int], _fields: List[str]) -> List[Dict]:
+            if not _ids:
                 return []
-            fields = ['name', 'attribute_id', 'sequence']
-            rows = model.read(ids, fields)
+            rows = model.read(_ids, _fields)
             # Ensure each row has id
-            for i, rid in enumerate(ids):
+            for i, rid in enumerate(_ids):
                 if i < len(rows) and 'id' not in rows[i]:
                     rows[i]['id'] = rid
             return rows
 
-        # Fast path for product.attribute.line to avoid heavy browse() prefetch causing timeouts
-        if model_name == 'product.attribute.line':
-            if not ids:
-                return []
-            fields = ['product_tmpl_id', 'attribute_id']
-            rows = model.read(ids, fields)
-            for i, rid in enumerate(ids):
-                if i < len(rows) and 'id' not in rows[i]:
-                    rows[i]['id'] = rid
-            return rows
-
-        # Fast path for product.attribute.price to avoid cache issues on many2one access
-        if model_name == 'product.attribute.price':
-            if not ids:
-                return []
-            fields = ['product_tmpl_id', 'value_id', 'price_plus', 'price_multiple']
-            rows = model.read(ids, fields)
-            for i, rid in enumerate(ids):
-                if i < len(rows) and 'id' not in rows[i]:
-                    rows[i]['id'] = rid
-            return rows
+        if self.fields is not None:
+            return _fast_read(ids, self.fields)
 
         # Default path: return recordsets
         result = []

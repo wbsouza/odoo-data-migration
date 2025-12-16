@@ -79,16 +79,16 @@ class Migration:
         self._mappings_provider.load_mappings_from_database("res.groups", "name")
         create_tracking_fields(self._configs)
         self.models_to_migrate = [
-            'product.category',
-            'product.template',
-            'product.attribute',
-            'product.attribute.value',
-            'product.attribute.line',
-            'product.attribute.price',
-            'product.product',
-            # 'res.partner',
-            # 'res.partner.parent',  # Second phase for parent_id relationships
-            # 'res.users',
+            # 'product.category',
+            # 'product.template',
+            # 'product.attribute',
+            # 'product.attribute.value',
+            # 'product.attribute.line',
+            # 'product.attribute.price',
+            # 'product.product',
+            'res.partner',
+            'res.partner.parent',  # Second phase for parent_id relationships
+            'res.users',
             # 'account.move',
             # 'account.payment',
         ]
@@ -97,9 +97,9 @@ class Migration:
             'product.category': ProductCategoryHandler(self._odoo_provider, self._db_provider, 'product.category'),
             'product.template': ProductTemplateHandler(self._odoo_provider, self._db_provider, 'product.template'),
             'product.attribute': ProductAttributeHandler(self._odoo_provider, self._db_provider, self._mappings_provider, 'product.attribute'),
-            'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, 'product.attribute.value'),
-            'product.attribute.line': ProductAttributeLineHandler(self._odoo_provider, self._db_provider, 'product.attribute.line'),
-            'product.attribute.price': ProductAttributePriceHandler(self._odoo_provider, self._db_provider, 'product.attribute.price'),
+            'product.attribute.value': ProductAttributeValueHandler(self._odoo_provider, self._db_provider, 'product.attribute.value', fields=['name', 'attribute_id', 'sequence']),
+            'product.attribute.line': ProductAttributeLineHandler(self._odoo_provider, self._db_provider, 'product.attribute.line', fields=['product_tmpl_id', 'attribute_id']),
+            'product.attribute.price': ProductAttributePriceHandler(self._odoo_provider, self._db_provider, 'product.attribute.price', fields=['product_tmpl_id', 'value_id', 'price_plus', 'price_multiple']),
             'product.product': ProductProductHandler(self._odoo_provider, self._db_provider, 'product.product'),
             'res.partner': ResPartnerHandler(self._odoo_provider, self._db_provider, 'res.partner'),
             'res.partner.parent': ResPartnerParentHandler(self._odoo_provider, self._db_provider, 'res.partner'),
@@ -107,7 +107,6 @@ class Migration:
             'account.move': AccountMoveHandler(self._odoo_provider, self._db_provider, 'account.move'),
             'account.payment': AccountPaymentHandler(self._odoo_provider, self._db_provider, 'account.payment'),
         }
-
 
     def migrate_model(self, model_name: str):
         """
@@ -120,65 +119,43 @@ class Migration:
             if handler is None or not handler:
                 raise HandlerNotFoundException(f"There is no handler for the model {model_name}!")
 
+            src_odoo = self._odoo_provider.get_odoo_connection(SOURCE)
+            # Include both active and archived records in migration
+            source_model_name = model_name
+            if model_name == 'res.partner.parent':
+                source_model_name = 'res.partner'
+
+            domain = []
+            if model_name == 'account.move':
+                # from Odoo 11 ignore draft invoices
+                source_model_name = 'account.invoice'
+                domain = [('type', '=', 'out_invoice'), ('state', '!=', 'draft')]
+
             # Fetch records from the source system
             eof = False
-            last_id = 0
-            batch_size = 500
+            offset = 0
+            batch_size = 300
             while not eof:
-
-                src_odoo = self._odoo_provider.get_odoo_connection(SOURCE)
-
-                # Include both active and archived records in migration
-                source_model_name = model_name
-                if model_name == 'res.partner.parent':
-                    source_model_name = 'res.partner'
-                # Odoo 11 source model for invoices is 'account.invoice'
-
-                # IMPORTANT: initialize domain per-batch so filters never leak and variable is always defined
-                domain = []
-
-                if model_name == 'account.move':
-                    source_model_name = 'account.invoice'
-                    # Odoo 11 account.invoice: exclude draft invoices
-                    domain = [('type', '=', 'out_invoice'), ('state', '!=', 'draft')]
-                # elif model_name == 'account.payment':
-                #     # Migrate only confirmed payments to guarantee correctness of associations
-                #     domain = [('state', '!=', 'draft')]
-
-                # IMPORTANT: reset domain per-batch to avoid leaking constraints across batches/models
-                if model_name == 'product.attribute.value':
-                    domain = []
-
-
-                paged_domain = list(domain)
-                paged_domain.append(('id', '>', last_id))
 
                 records = handler.fetch_items(
                     odoo=src_odoo,
                     model_name=source_model_name,
-                    domain=paged_domain,
+                    domain=domain,
                     limit=batch_size,
-                    order="id"
+                    offset=offset,
+                    order='id',
                 )
 
                 eof = len(records) < 1
                 if not eof:
                     _logger.info(f"Fetched {len(records)} records for {model_name}. Applying transformations...")
-                    # Apply transformations
                     transformed_records = []
                     for record in records:
                         transformed_records += handler.apply_transformations(record)
-
-                    _logger.info(f"Transformations complete for {model_name}. Saving into destination...")
-
-                    # Insert transformed records into the destination
+                    _logger.info(f"Transformations applied for {len(transformed_records)} records on {model_name}. Saving into destination...")
                     handler.save_into_destination(transformed_records)
 
-                    last = records[-1]
-                    if isinstance(last, dict):
-                        last_id = last['id']
-                    else:
-                        last_id = last.id
+                offset += batch_size
 
             _logger.info(f"Migration complete for {model_name}.")
         except ResourceNotFoundException as e:

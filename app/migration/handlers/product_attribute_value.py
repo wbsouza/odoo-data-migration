@@ -12,7 +12,8 @@ class ProductAttributeValueHandler(DomainHandler):
             self,
             odoo_provider: OdooConnectionProvider,
             db_provider: DBConnectionProvider,
-            model_name: str
+            model_name: str,
+            fields: List[str]
     ):
         """
         Initialize the ProductAttributeValueHandler with the provider pattern.
@@ -21,6 +22,7 @@ class ProductAttributeValueHandler(DomainHandler):
         :param model_name: The model name to migrate.
         """
         super().__init__(odoo_provider, db_provider, model_name)
+        self.fields = fields
 
     def find_dest_group_id(self, src_group: Any) -> Optional[int]:
         """

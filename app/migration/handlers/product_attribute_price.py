@@ -13,6 +13,7 @@ class ProductAttributePriceHandler(DomainHandler):
         odoo_provider: OdooConnectionProvider,
         db_provider: DBConnectionProvider,
         model_name: str,
+        fields: List[str],
     ):
         """
         Handle migration of product.attribute.price (v11) into
@@ -31,6 +32,7 @@ class ProductAttributePriceHandler(DomainHandler):
           - sequence_esp
         """
         super().__init__(odoo_provider, db_provider, model_name)
+        self.fields = fields
 
     def _find_dst_ptav_id(self, dst_template_id: int, dst_pav_id: int) -> Optional[int]:
         """Locate the PTAV id in destination by template and attribute value."""
