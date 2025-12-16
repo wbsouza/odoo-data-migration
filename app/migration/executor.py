@@ -135,6 +135,8 @@ class Migration:
             eof = False
             offset = 0
             batch_size = 300
+            processed_total = 0
+
             while not eof:
 
                 records = handler.fetch_items(
@@ -148,14 +150,17 @@ class Migration:
 
                 eof = len(records) < 1
                 if not eof:
-                    _logger.info(f"Fetched {len(records)} records for {model_name}. Applying transformations...")
+                    _logger.info(f"Fetched {len(records)} records for {model_name}. Applying transformations ...")
                     transformed_records = []
                     for record in records:
                         transformed_records += handler.apply_transformations(record)
-                    _logger.info(f"Transformations applied for {len(transformed_records)} records on {model_name}. Saving into destination...")
+                    _logger.info(f"Transformations applied for {len(transformed_records)} records on {model_name}. Saving into destination ...")
                     handler.save_into_destination(transformed_records)
 
+                processed_total += len(records)
                 offset += batch_size
+                _logger.info(f"Processed {processed_total} records for {model_name} ...")
+
 
             _logger.info(f"Migration complete for {model_name}.")
         except ResourceNotFoundException as e:
