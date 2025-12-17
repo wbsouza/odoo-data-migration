@@ -94,10 +94,9 @@ class ProductTemplateHandler(DomainHandler):
 
     def _migrate_template_attachments(self, src_template_id: int, dst_template_id: int):
         try:
-            src_env = self._odoo_src.session.env
-            dst_env = self._odoo_dst.session.env
-            src_attach = src_env['ir.attachment'].with_context(active_test=False)
-            dst_attach = dst_env['ir.attachment'].with_context(active_test=False)
+
+            src_attach = self.get_src_model('ir.attachment')
+            dst_attach = self.get_dst_model('ir.attachment')
 
             src_ids = src_attach.search([('res_model', '=', 'product.template'), ('res_id', '=', src_template_id)])
             if not src_ids:

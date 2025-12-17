@@ -33,9 +33,8 @@ class ResPartnerHandler(DomainHandler):
         dst_record = find_record_by_old_id(conn, 'res_partner', src_record.id)
         if dst_record:
             # Return the Odoo record object, including archived records
-            model = self.get_dst_model()
-            # Use with_context to include archived records in browse operation
-            return model.with_context(active_test=False).browse(dst_record['id'])
+            model = self.get_dst_model('res.partner')
+            return model.browse(dst_record['id'])
         return None
 
     def find_dest_country_by_name(self, src_country):

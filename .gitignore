@@ -4,7 +4,7 @@ __pycache__/
 migration.conf
 
 *.iml
-#*.log
+*.log
 
 ## Directory-based project format:
 .idea/

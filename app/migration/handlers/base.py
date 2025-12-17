@@ -38,10 +38,7 @@ class DomainHandler:
             model_name = self.src_model_name
         odoo_conn = self._odoo_provider.get_odoo_connection(SOURCE)
         model = odoo_conn.get_model(model_name)
-        try:
-            return model.with_context(active_test=False)
-        except Exception:
-            return model
+        return model
 
     def get_dst_model_name(self) -> Any:
         return self.src_model_name
@@ -50,7 +47,9 @@ class DomainHandler:
         if model_name is None:
             model_name = self.get_dst_model_name()
         odoo_conn = self._odoo_provider.get_odoo_connection(DESTINATION)
-        return odoo_conn.get_model(model_name)
+        model = odoo_conn.get_model(model_name)
+        return model
+
 
     @staticmethod
     def record_exists(odoo: OdooConnection, model_name: str, field: str, value: str) -> bool:

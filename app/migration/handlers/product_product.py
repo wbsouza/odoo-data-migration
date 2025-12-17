@@ -70,13 +70,6 @@ class ProductProductHandler(DomainHandler):
             pass
         return None
 
-    def _dst_model_including_archived(self, model_name: str = 'product.product'):
-        # Include both active and archived records in searches/updates.
-        model = self.get_dst_model(model_name)
-        try:
-            return model.with_context(active_test=False)
-        except Exception:
-            return model
 
     def _resolve_dst_template_id(self, src_record) -> int:
         # Resolve destination product.template id using x_old_id mapping.
@@ -91,7 +84,7 @@ class ProductProductHandler(DomainHandler):
 
     def _find_single_variant_for_template(self, dst_product_tmpl_id: int) -> Optional[Any]:
         """Find the single auto-created variant for a template (no attributes)."""
-        model = self._dst_model_including_archived('product.product')
+        model = self.get_dst_model('product.product')
         ids = model.search([('product_tmpl_id', '=', dst_product_tmpl_id)])
         if ids and len(ids) == 1:
             return model.browse(ids[0])
@@ -99,7 +92,7 @@ class ProductProductHandler(DomainHandler):
 
     def _find_any_variant_for_template(self, dst_product_tmpl_id: int) -> Optional[Any]:
         """Find any variant for a template. Used when we need to update an existing variant."""
-        model = self._dst_model_including_archived('product.product')
+        model = self.get_dst_model('product.product')
         ids = model.search([('product_tmpl_id', '=', dst_product_tmpl_id)], limit=1)
         if ids:
             return model.browse(ids[0])
@@ -135,7 +128,8 @@ class ProductProductHandler(DomainHandler):
         cached = self._src_attribute_value_ids_cache.get(src_product_id)
         if cached is not None:
             return cached
-        rows = src_env['product.product'].read([src_product_id], ['attribute_value_ids'])
+        model = self.get_src_model('product.product')
+        rows = model.read([src_product_id], ['attribute_value_ids'])
         if not rows:
             self._src_attribute_value_ids_cache[src_product_id] = []
             return []
@@ -168,7 +162,7 @@ class ProductProductHandler(DomainHandler):
             return cached
 
         dst_env = self._odoo_dst.session.env
-        pp_model = dst_env['product.product'].with_context(active_test=False)
+        pp_model = self.get_dst_model('product.product')
         variant_ids = pp_model.search([('product_tmpl_id', '=', dst_product_tmpl_id)])
         if not variant_ids:
             self._dst_variant_key_cache[dst_product_tmpl_id] = {}
@@ -182,7 +176,7 @@ class ProductProductHandler(DomainHandler):
 
         ptav_cache: Dict[int, str] = {}
         if all_ptav_ids:
-            ptav_model = dst_env['product.template.attribute.value'].with_context(active_test=False)
+            ptav_model =  self.get_dst_model('product.template.attribute.value')
             ptav_rows = ptav_model.read(list(all_ptav_ids), ['attribute_id', 'product_attribute_value_id'])
             for ptav in ptav_rows:
                 pav = ptav.get('product_attribute_value_id')
@@ -209,7 +203,7 @@ class ProductProductHandler(DomainHandler):
         dst_id = key_map.get(key)
         if not dst_id:
             return None
-        return self._dst_model_including_archived('product.product').browse(dst_id)
+        return self.get_dst_model('product.product').browse(dst_id)
 
     def _abort(self, message: str, *args: Any):
         _logger.error(message, *args)
@@ -250,7 +244,7 @@ class ProductProductHandler(DomainHandler):
         Raises ValueError if template not found - migration will abort.
         """
         dst_product_tmpl_id = self._resolve_dst_template_id(src_record)
-        model = self._dst_model_including_archived('product.product')
+        model = self.get_dst_model('product.product')
 
         canonical_default_code = self._canonical_src_default_code(src_record)
 
@@ -315,7 +309,7 @@ class ProductProductHandler(DomainHandler):
 
         if existing_product:
             dst_id = existing_product['id']
-            dst_record = self._dst_model_including_archived('product.product').browse(dst_id)
+            dst_record = self.get_dst_model('product.product').browse(dst_id)
             _logger.info(
                 "Found destination product.product by x_old_id mapping src_id=%s -> dst_id=%s",
                 src_record.id,
@@ -383,7 +377,7 @@ class ProductProductHandler(DomainHandler):
                 continue
 
             try:
-                dst_model = self._dst_model_including_archived('product.product')
+                dst_model = self.get_dst_model('product.product')
 
                 vals = dict(data)
 
