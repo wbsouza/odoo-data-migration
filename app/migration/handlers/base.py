@@ -37,7 +37,11 @@ class DomainHandler:
         if model_name is None:
             model_name = self.src_model_name
         odoo_conn = self._odoo_provider.get_odoo_connection(SOURCE)
-        return odoo_conn.get_model(model_name)
+        model = odoo_conn.get_model(model_name)
+        try:
+            return model.with_context(active_test=False)
+        except Exception:
+            return model
 
     def get_dst_model_name(self) -> Any:
         return self.src_model_name
@@ -146,7 +150,11 @@ class DomainHandler:
                     dst_model = self.get_dst_model(model_name)
                     logging.info(f"Creating {entity_label} \"{label}\" ...")
                     x_new_id = dst_model.create(data)
-                    dst_record['id'] = x_new_id
+                    # Some handlers pass dst_record=None for creates. Avoid assigning into None.
+                    if isinstance(dst_record, dict):
+                        dst_record['id'] = x_new_id
+                    else:
+                        tr['dst_record'] = {'id': x_new_id}
 
                 elif action == 'update' and dst_record:
                     # Pure JSON-RPC: avoid browse()/recordsets; write by ids only

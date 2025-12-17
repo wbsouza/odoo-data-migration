@@ -6,6 +6,14 @@ from .base import DomainHandler
 from ..core.odoo_connection import OdooConnectionProvider, DESTINATION
 from ..core.database import DBConnectionProvider, find_record_by_old_id
 
+try:
+    from odoorpc.error import RPCError
+except Exception:  # pragma: no cover
+    RPCError = Exception
+
+
+
+_logger = logging.getLogger(__name__)
 
 
 class ResPartnerHandler(DomainHandler):
@@ -53,7 +61,19 @@ class ResPartnerHandler(DomainHandler):
         return states[0] if states else None
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
+        _logger.info(
+            "Processing res.partner src_id=%s name=%s ref=%s",
+            src_record.id,
+            src_record.name,
+            src_record.ref,
+        )
         dst_record = self.find_dest_partner_by_old_id(src_record)
+        if dst_record:
+            _logger.info(
+                "Found destination res.partner by x_old_id mapping src_id=%s -> dst_id=%s",
+                src_record.id,
+                dst_record.id,
+            )
         result = [{
             'action': 'update' if dst_record else 'create',
             'model': 'res.partner',
@@ -62,6 +82,7 @@ class ResPartnerHandler(DomainHandler):
             'data': {
                 'name': src_record.name,
                 'display_name': src_record.display_name,
+                'active': src_record.active,
                 'date': src_record.date,
                 'ref': src_record.ref,
                 'lang': src_record.lang,
@@ -79,7 +100,7 @@ class ResPartnerHandler(DomainHandler):
                 'phone': src_record.phone,
                 'mobile': src_record.mobile,
                 'is_company': src_record.is_company,
-                'company_id': src_record.company_id.id,
+                'company_id': src_record.company_id.id if src_record.company_id else None,
                 'x_old_id': src_record.id,
 
                 # Foreign key fields with lookup strategies
@@ -104,19 +125,113 @@ class ResPartnerHandler(DomainHandler):
             src_record = transformed_record['src_record']
 
             if action in ['create', 'update']:
+                try:
+                    if action == 'create':
+                        dst_model = self.get_dst_model()
+                        _logger.info(
+                            "Creating res.partner src_id=%s name=%s ref=%s",
+                            src_record.id,
+                            src_record.name,
+                            src_record.ref,
+                        )
+                        try:
+                            x_new_id = dst_model.create(data)
+                        except RPCError as rpc_ex:
+                            msg = str(rpc_ex) or ''
+                            if 'VAT' in msg or 'GST/HST' in msg:
+                                _logger.warning(
+                                    "VAT validation failed on create src_id=%s name=%s vat=%s err=%s",
+                                    src_record.id,
+                                    src_record.name,
+                                    data.get('vat'),
+                                    (msg[:300] if msg else 'RPCError'),
+                                )
+                                data_retry = dict(data)
+                                data_retry['vat'] = None
+                                _logger.warning(
+                                    "Retrying res.partner create without vat due to validation error src_id=%s name=%s vat=%s",
+                                    src_record.id,
+                                    src_record.name,
+                                    data.get('vat'),
+                                )
+                                x_new_id = dst_model.create(data_retry)
+                                _logger.info(
+                                    "Retry succeeded (vat cleared) src_id=%s -> dst_id=%s",
+                                    src_record.id,
+                                    x_new_id,
+                                )
+                            else:
+                                _logger.error(
+                                    "RPCError on create res.partner src_id=%s name=%s err=%s",
+                                    src_record.id,
+                                    src_record.name,
+                                    (msg[:300] if msg else 'RPCError'),
+                                )
+                                raise
 
-                if action == 'create':
-                    dst_model = self.get_dst_model()
-                    logging.info(f"Creating {self.get_dst_model()} \"{src_record.name}\" ...")
-                    x_new_id = dst_model.create(data)
+                    elif action == 'update':
+                        dst_record = transformed_record['dst_record']
+                        _logger.info(
+                            "Updating res.partner dst_id=%s src_id=%s name=%s ref=%s",
+                            dst_record.id,
+                            src_record.id,
+                            src_record.name,
+                            src_record.ref,
+                        )
+                        try:
+                            dst_record.write(data)
+                        except RPCError as rpc_ex:
+                            msg = str(rpc_ex) or ''
+                            if 'VAT' in msg or 'GST/HST' in msg:
+                                _logger.warning(
+                                    "VAT validation failed on update src_id=%s dst_id=%s name=%s vat=%s err=%s",
+                                    src_record.id,
+                                    dst_record.id,
+                                    src_record.name,
+                                    data.get('vat'),
+                                    (msg[:300] if msg else 'RPCError'),
+                                )
+                                data_retry = dict(data)
+                                data_retry['vat'] = None
+                                _logger.warning(
+                                    "Retrying res.partner update without vat due to validation error src_id=%s dst_id=%s name=%s vat=%s",
+                                    src_record.id,
+                                    dst_record.id,
+                                    src_record.name,
+                                    data.get('vat'),
+                                )
+                                dst_record.write(data_retry)
+                                _logger.info(
+                                    "Retry succeeded (vat cleared) src_id=%s dst_id=%s",
+                                    src_record.id,
+                                    dst_record.id,
+                                )
+                            else:
+                                _logger.error(
+                                    "RPCError on update res.partner src_id=%s dst_id=%s name=%s err=%s",
+                                    src_record.id,
+                                    dst_record.id,
+                                    src_record.name,
+                                    (msg[:300] if msg else 'RPCError'),
+                                )
+                                raise
+                        x_new_id = dst_record.id
 
-                elif action == 'update':
-                    logging.info(f"Updating partner \"{src_record.name}\" ...")
-                    dst_record = transformed_record['dst_record']
-                    dst_record.write(data)
-                    x_new_id = dst_record.id
-
-                self.update_tracking_ids(
-                    x_new_id=x_new_id,
-                    record=src_record
-                )
+                    _logger.info(
+                        "Saving tracking mapping: src_id=%s -> dst_id=%s",
+                        src_record.id,
+                        x_new_id,
+                    )
+                    self.update_tracking_ids(
+                        x_new_id=x_new_id,
+                        record=src_record
+                    )
+                except Exception:
+                    _logger.exception(
+                        "Error processing res.partner action=%s src_id=%s name=%s ref=%s",
+                        action,
+                        src_record.id,
+                        src_record.name,
+                        src_record.ref,
+                    )
+                    continue
