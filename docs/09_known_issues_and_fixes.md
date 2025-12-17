@@ -117,3 +117,122 @@ This is a **fundamental data model mismatch** between Odoo versions:
   - Added `_find_any_variant_for_template()` method
   - Rewrote `find_dst_product()` with 3-strategy lookup
   - Updated `save_into_destination()` with better collapse logging
+
+## Issue #2: Missing `res.partner` records (Archived records skipped)
+
+### Problem Description
+
+During partner migration, only a subset of `res.partner` records were migrated (e.g., ~2000 instead of ~6000+).
+This caused downstream failures:
+
+- `res.partner.parent`: warnings like `Destination partner not found for source ID ... Skipping parent update.`
+- `res.users`: errors like `Partner 'Webmaster' ... not found in destination`.
+
+### Root Cause
+
+Odoo `search()` defaults to context `active_test=True`, which filters out archived records (`active=False`).
+As a result, many archived partners were never fetched from the source and therefore never created/updated in the destination.
+
+### The Fix
+
+- Force source model access to use `active_test=False` so `search()` includes active and archived records.
+- Ensure `res.partner.active` is migrated so archived state is preserved in destination.
+
+Files:
+
+- `app/migration/handlers/base.py`: source model access uses `with_context(active_test=False)`.
+- `app/migration/handlers/res_partner.py`: migrates `active` field.
+
+### If it still happens (Troubleshooting)
+
+- Verify pagination is deterministic:
+  - Always fetch with `order='id'`.
+- Verify source counts:
+  - Compare `res.partner` counts in source vs destination (including archived).
+- Check for domain filters:
+  - Ensure no implicit domain is applied to `res.partner` migration.
+
+## Issue #3: `res.partner` migration interrupted by VAT validation
+
+### Problem Description
+
+Partner migration may stop early with an RPC error during `res.partner` create/update when the source `vat` value
+does not match the destination validation rules.
+
+Symptoms in logs:
+
+- `Unexpected error during migration of res.partner: The GST/HST number ... does not seem to be valid`
+
+This can cause downstream failures (e.g., `res.users` partner not found) because the migration stops before all
+partners are created.
+
+### Root Cause
+
+Odoo 17 validates VAT format more strictly (often expecting `CC##` where `CC` is a country code).
+Some source records contain non-VAT strings in the VAT field (e.g., PO numbers), causing destination create/write
+to fail.
+
+### The Fix
+
+Retry the same create/update without the `vat` field when the RPC error indicates VAT/GST validation.
+This keeps the migration moving and preserves the rest of the partner data.
+
+Files:
+
+- `app/migration/handlers/res_partner.py`: on VAT/GST validation RPC errors, retry create/write with `vat=None`.
+
+### Behavior After Fix
+
+- The migration does not abort the full `res.partner` model migration when a single partner has invalid VAT.
+- The partner record is created/updated after clearing `vat`.
+
+Log markers:
+
+- `VAT validation failed on create ...`
+- `Retrying res.partner create without vat ...`
+- `Retry succeeded (vat cleared) ...`
+
+### Related improvement: Empty-message exceptions
+
+Some exceptions can have an empty `str(e)` which makes logs look like:
+
+- `Unexpected error during migration of <model>:`
+
+To improve diagnostics, the executor now also logs `repr(e)` for unexpected errors.
+
+Files:
+
+- `app/migration/executor.py`: logs `repr(e)` for unexpected migration errors.
+
+## Issue #4: `res.users` create fails with `'NoneType' object does not support item assignment`
+
+### Problem Description
+
+During `res.users` migration, many users may log errors like:
+
+- `Error processing user '<name>': 'NoneType' object does not support item assignment`
+
+The migration loop continues, but most user creates fail.
+
+### Root Cause
+
+The generic helper `save_records()` in `app/migration/handlers/base.py` attempted to set
+`dst_record['id'] = x_new_id` after a create.
+
+For create actions, handlers commonly pass `dst_record=None`, so assigning into it raises a `TypeError`.
+
+### The Fix
+
+In `save_records()` create path:
+
+- If `dst_record` is a dict, assign `dst_record['id'] = x_new_id`
+- Otherwise, store the created id back into the transformed record as `tr['dst_record'] = {'id': x_new_id}`
+
+Files:
+
+- `app/migration/handlers/base.py`: fixed create path in `save_records()` to avoid assigning into `None`.
+
+### Behavior After Fix
+
+- `res.users` create operations no longer fail due to `NoneType` assignment.
+- Remaining failures (if any) should be genuine RPC/data issues and will be logged per user.

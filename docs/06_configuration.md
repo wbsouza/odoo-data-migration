@@ -153,6 +153,24 @@ Log format:
 2024-01-15 10:30:45,456 INFO Processing product.template src_id=1 default_code=PROD001
 ```
 
+### Monitoring progress (using existing log file)
+
+The primary live output for migrations is the existing log file:
+
+- `app/logs/migration.log`
+
+Common commands:
+
+```bash
+tail -f app/logs/migration.log
+```
+
+Filter key events:
+
+```bash
+grep -E "Migration complete for|Unexpected error during migration of" app/logs/migration.log | tail -n 50
+```
+
 ## Migration Sequence
 
 The order of models in `executor.py` matters due to foreign key dependencies:
@@ -186,3 +204,14 @@ batch_size = 500  # Adjust as needed
 ```
 
 Larger batches = faster but more memory. Smaller = slower but safer for large records.
+
+## Archived Records (`active_test=False`)
+
+Odoo searches default to filtering out archived records (`active=False`) via context `active_test=True`.
+
+This project forces `active_test=False` on source model access so migrations include both active and archived records.
+This is required for correctness of:
+
+- `res.partner` (otherwise many archived partners are skipped)
+- `res.partner.parent` (parent relationships reference partners that may be archived)
+- `res.users` (users reference partners)

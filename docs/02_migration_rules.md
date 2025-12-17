@@ -140,6 +140,21 @@ except Exception as e:
     continue  # Don't stop the whole migration
 ```
 
+### Partner VAT/HST validation
+
+For `res.partner`, destination-side VAT/HST validation can reject some records.
+The migration must not abort the entire model migration because of a single invalid VAT value.
+The correct behavior is:
+
+- Attempt create/update with `vat`
+- If the destination rejects the VAT/HST value, retry with `vat=False`/empty
+
+Relevant log markers:
+
+- `VAT validation failed ...`
+- `Retrying res.partner ... without vat ...`
+- `Retry succeeded (vat cleared) ...`
+
 ## Idempotency
 
 Migrations must be idempotent (safe to re-run):
@@ -154,3 +169,8 @@ Migrations must be idempotent (safe to re-run):
 - Default batch size: **500 records**
 - Fetch records ordered by `id` for deterministic processing
 - Include both active and archived records (`active_test=False`)
+
+Implementation note:
+
+- Source model access is performed with context `active_test=False` so `search()` includes archived records.
+- When a model has an `active` field (e.g., `res.partner`), the migration should migrate `active` so the destination preserves archived state.
