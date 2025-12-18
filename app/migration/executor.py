@@ -79,13 +79,13 @@ class Migration:
         self._mappings_provider.load_mappings_from_database("res.groups", "name")
         create_tracking_fields(self._configs)
         self.models_to_migrate = [
-            # 'product.category',
-            # 'product.template',
-            # 'product.attribute',
-            # 'product.attribute.value',
-            # 'product.attribute.line',
-            # 'product.attribute.price',
-            # 'product.product',
+            'product.category',
+            'product.template',
+            'product.attribute',
+            'product.attribute.value',
+            'product.attribute.line',
+            'product.attribute.price',
+            'product.product',
             'res.partner',
             'res.partner.parent',  # Second phase for parent_id relationships
             'res.users',
@@ -130,6 +130,9 @@ class Migration:
                 # from Odoo 11 ignore draft invoices
                 source_model_name = 'account.invoice'
                 domain = [('type', '=', 'out_invoice'), ('state', '!=', 'draft')]
+
+            if model_name == 'res.users':
+                domain = [('share','=',False)]
 
             # Fetch records from the source system
             eof = False
