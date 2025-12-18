@@ -25,6 +25,9 @@ class ResPartnerHandler(DomainHandler):
             model_name: str
     ):
         super().__init__(odoo_provider, db_provider, model_name)
+        # Cache for frequently accessed models and data
+        self._country_cache: Dict[str, int] = {}
+        self._state_cache: Dict[str, int] = {}
 
 
     def find_dest_partner_by_old_id(self, src_record):
@@ -38,17 +41,36 @@ class ResPartnerHandler(DomainHandler):
         return None
 
     def find_dest_country_by_name(self, src_country):
-        """Find destination country by name"""
+        """Find destination country by name with caching"""
         if not src_country:
             return None
+        
+        # Check cache first
+        cache_key = src_country.name
+        if cache_key in self._country_cache:
+            return self._country_cache[cache_key]
+        
+        # Not in cache, perform lookup
         country_model = self.get_dst_model('res.country')
         countries = country_model.search([('name', '=', src_country.name)], limit=1)
-        return countries[0] if countries else None
+        result = countries[0] if countries else None
+        
+        # Cache the result (even if None to avoid repeated lookups)
+        self._country_cache[cache_key] = result
+        return result
 
     def find_dest_state_by_name(self, src_state):
-        """Find destination state by name and country"""
+        """Find destination state by name and country with caching"""
         if not src_state:
             return None
+        
+        # Create cache key including country for more precise caching
+        country_name = src_state.country_id.name if src_state.country_id else ''
+        cache_key = f"{src_state.name}|{country_name}"
+        
+        if cache_key in self._state_cache:
+            return self._state_cache[cache_key]
+        
         state_model = self.get_dst_model('res.country.state')
         domain = [('name', '=', src_state.name)]
         # If we have country info, add it to make the search more precise
@@ -56,8 +78,13 @@ class ResPartnerHandler(DomainHandler):
             country_id = self.find_dest_country_by_name(src_state.country_id)
             if country_id:
                 domain.append(('country_id', '=', country_id))
+        
         states = state_model.search(domain, limit=1)
-        return states[0] if states else None
+        result = states[0] if states else None
+        
+        # Cache the result (even if None to avoid repeated lookups)
+        self._state_cache[cache_key] = result
+        return result
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         _logger.info(
@@ -109,6 +136,21 @@ class ResPartnerHandler(DomainHandler):
                 # Note: parent_id will be handled in a separate two-phase handler
             }
         }]
+
+        # Images: write main image fields directly on res.partner so they show in Odoo 17 UI.
+        # Odoo 11 fields: image, image_medium, image_small
+        # Odoo 17 fields: image_1920, image_1024, image_512
+        image_vals: Dict[str, Any] = {}
+        try:
+            image_vals['image_1920'] = getattr(src_record, 'image', None) or None
+            image_vals['image_1024'] = getattr(src_record, 'image_medium', None) or None
+            image_vals['image_512'] = getattr(src_record, 'image_small', None) or None
+        except Exception:
+            image_vals = {}
+
+        if image_vals:
+            result[0]['data'].update(image_vals)
+
         return result
 
     def save_into_destination(self, transformed_records: List[Dict]):
