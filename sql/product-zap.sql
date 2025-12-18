@@ -1,0 +1,18 @@
+delete from product_attribute_custom_value;
+delete from product_attribute_product_template_rel ;
+delete from product_alternative_rel;
+delete from product_attr_exclusion_value_ids_rel;
+delete from product_attribute_product_template_rel ;
+delete from product_attribute_value_product_template_attribute_line_rel ;
+delete from product_public_category_product_template_rel ;
+delete from product_template_attribute_exclusion ;
+delete from product_variant_combination ;
+delete from product_attribute_value ;
+delete from product_template_attribute_line;
+delete from product_attribute;
+delete from product_public_category_product_template_rel ;
+delete from product_public_category ;
+delete from product_product where product_tmpl_id > 1;
+delete from product_template where id > 1;
+delete from product_category where id > 4;
+delete from ir_attachment where res_model = 'product.template';
