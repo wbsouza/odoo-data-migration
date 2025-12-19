@@ -79,17 +79,17 @@ class Migration:
         self._mappings_provider.load_mappings_from_database("res.groups", "name")
         create_tracking_fields(self._configs)
         self.models_to_migrate = [
-            'product.category',
-            'product.template',
-            'product.attribute',
-            'product.attribute.value',
-            'product.attribute.line',
-            'product.attribute.price',
-            'product.product',
-            'res.partner',
-            'res.partner.parent',  # Second phase for parent_id relationships
-            'res.users',
-            # 'account.move',
+            # 'product.category',
+            # 'product.template',
+            # 'product.attribute',
+            # 'product.attribute.value',
+            # 'product.attribute.line',
+            # 'product.attribute.price',
+            # 'product.product',
+            # 'res.partner',
+            # 'res.partner.parent',  # Second phase for parent_id relationships
+            # 'res.users',
+            'account.move',
             # 'account.payment',
         ]
 
@@ -137,7 +137,7 @@ class Migration:
             # Fetch records from the source system
             eof = False
             offset = 0
-            batch_size = 300
+            batch_size = 50 if model_name == 'account.move' else 300
             processed_total = 0
 
             while not eof:

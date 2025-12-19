@@ -23,36 +23,99 @@ class AccountMoveHandler(DomainHandler):
             model_name: str
     ):
         super().__init__(odoo_provider, db_provider, model_name)
+        # Use fast read for source invoices (account.invoice) to avoid browse() implicit reads/timeouts.
+        # This is effective because executor passes model_name='account.invoice' for account.move migration.
+        self.fields = [
+            'id',
+            'number',
+            'type',
+            'state',
+            'partner_id',
+            'user_id',
+            'date_invoice',
+            'date',
+            'start_date',
+            'end_date',
+            'ref',
+            'narration',
+        ]
         self._product_cache = CacheService(lambda product_id: self.get_dst_model('product.product').browse(product_id))
         self._partner_cache = CacheService(lambda partner_id: self.get_dst_model('res.partner').browse(partner_id))
         self._tax_cache: Dict[str, Any] = {}
         self._tax_ids_cache: Dict[str, Any] = {}
         self._account_cache: Dict[str, Any] = {}
+        self._product_id_cache: Dict[int, Optional[int]] = {}
+        self._partner_id_cache: Dict[int, Optional[int]] = {}
+        self._user_id_cache: Dict[int, Optional[int]] = {}
+        self._move_line_id_cache: Dict[int, Optional[int]] = {}
         self._sale_journal = None
         self._company = None
+
+    @staticmethod
+    def _get_m2o_id(val: Any) -> Optional[int]:
+        # Odoo read() returns many2one as [id, display_name]
+        if not val:
+            return None
+        if isinstance(val, (list, tuple)) and val:
+            return val[0]
+        if isinstance(val, int):
+            return val
+        return None
+
+    @staticmethod
+    def _get_field(src_record: Any, key: str, default: Any = False) -> Any:
+        if isinstance(src_record, dict):
+            return src_record.get(key, default)
+        return getattr(src_record, key, default)
 
 
 
     def get_new_product_id_from_old_id(self, x_old_id: Optional[int]) -> Optional[int]:
         if not x_old_id:
             return None
+        cached = self._product_id_cache.get(x_old_id)
+        if cached is not None:
+            return cached
         conn = self._db_provider.get_connection(DESTINATION)
-        return find_id_by_old_id(conn, 'product_product', x_old_id)
+        new_id = find_id_by_old_id(conn, 'product_product', x_old_id)
+        self._product_id_cache[x_old_id] = new_id
+        return new_id
 
     # --- Mapping helpers (source x_old_id -> destination new id) ---
     def get_new_user_id_from_old_id(self, x_old_id: Optional[int]) -> Optional[int]:
         """Map source res.users.id to destination id via x_old_id."""
         if not x_old_id:
             return None
+        cached = self._user_id_cache.get(x_old_id)
+        if cached is not None:
+            return cached
         conn = self._db_provider.get_connection(DESTINATION)
-        return find_id_by_old_id(conn, 'res_users', x_old_id)
+        new_id = find_id_by_old_id(conn, 'res_users', x_old_id)
+        self._user_id_cache[x_old_id] = new_id
+        return new_id
 
     def get_new_partner_id_from_old_id(self, x_old_id: Optional[int]) -> Optional[int]:
         """Map source res.partner.id to destination id via x_old_id."""
         if not x_old_id:
             return None
+        cached = self._partner_id_cache.get(x_old_id)
+        if cached is not None:
+            return cached
         conn = self._db_provider.get_connection(DESTINATION)
-        return find_id_by_old_id(conn, 'res_partner', x_old_id)
+        new_id = find_id_by_old_id(conn, 'res_partner', x_old_id)
+        self._partner_id_cache[x_old_id] = new_id
+        return new_id
+
+    def get_new_move_line_id_from_old_id(self, x_old_id: Optional[int]) -> Optional[int]:
+        if not x_old_id:
+            return None
+        cached = self._move_line_id_cache.get(x_old_id)
+        if cached is not None:
+            return cached
+        conn = self._db_provider.get_connection(DESTINATION)
+        new_id = find_id_by_old_id(conn, 'account_move_line', x_old_id)
+        self._move_line_id_cache[x_old_id] = new_id
+        return new_id
 
     def get_new_partner_shipping_id_from_old_id(self, x_old_id: Optional[int]) -> Optional[int]:
         """Map shipping partner; if no separate shipping mapping, fallback to partner mapping."""
@@ -186,11 +249,11 @@ class AccountMoveHandler(DomainHandler):
     def _get_invoice_data(self, company, partner, src_record):
         """Build invoice head data using destination models only; no self.env."""
         # Map user (optional)
-        old_user_id = src_record.user_id.id if src_record.user_id else False
+        old_user_id = self._get_m2o_id(self._get_field(src_record, 'user_id', False)) or False
         user_id = self.get_new_user_id_from_old_id(old_user_id) or False
 
         # Partner shipping: map by old_id; browse as record
-        old_partner_id = src_record.partner_id.id if src_record.partner_id else False
+        old_partner_id = self._get_m2o_id(self._get_field(src_record, 'partner_id', False)) or False
         partner_shipping_id = self.get_new_partner_shipping_id_from_old_id(old_partner_id) or partner.id
         partner_shipping = self._partner_cache.get(partner_shipping_id)
 
@@ -198,7 +261,7 @@ class AccountMoveHandler(DomainHandler):
         currency = partner.currency_id or company.currency_id
 
         # Move type from source (Odoo 11: 'type' field)
-        move_type = src_record.type or 'out_invoice'
+        move_type = self._get_field(src_record, 'type', False) or 'out_invoice'
 
 
         # Journal by type
@@ -234,14 +297,16 @@ class AccountMoveHandler(DomainHandler):
                     pass
             return False
 
-        inv_date = _to_date_str(src_record.date_invoice or src_record.date)
+        inv_date = _to_date_str(
+            self._get_field(src_record, 'date_invoice', False) or self._get_field(src_record, 'date', False)
+        )
 
         # Guard helpers to avoid passing callables/records
         def _safe_str(val):
             return val if isinstance(val, (str, int, float)) else False
 
         invoice_data = {
-            'name': src_record.number,
+            'name': self._get_field(src_record, 'number', False),
             'move_type': move_type,
             'company_id': company.id,
             'partner_id': partner.id,
@@ -253,22 +318,23 @@ class AccountMoveHandler(DomainHandler):
             'invoice_payment_term_id': False,
             'user_id': user_id,
             'invoice_date': inv_date or False,
-            'start_date': _safe_str(src_record.start_date or False),
-            'end_date': _safe_str(src_record.end_date or False),
+            'start_date': _safe_str(self._get_field(src_record, 'start_date', False) or False),
+            'end_date': _safe_str(self._get_field(src_record, 'end_date', False) or False),
             'fiscal_position_id': fiscal_position_id,
-            'x_old_id': src_record.id,
+            'x_old_id': self._get_field(src_record, 'id'),
         }
         # Optional textual fields
-        invoice_data['ref'] = _safe_str(src_record.ref) or False
-        invoice_data['narration'] = _safe_str(src_record.narration) or False
+        invoice_data['ref'] = _safe_str(self._get_field(src_record, 'ref', False)) or False
+        invoice_data['narration'] = _safe_str(self._get_field(src_record, 'narration', False)) or False
         return invoice_data
 
     def apply_transformations(self, src_record: Any) -> List[Dict]:
         company = self._get_company()
-        # Ensure we pass the integer old partner ID, not a recordset
-        partner_id = self.get_new_partner_id_from_old_id(src_record.partner_id.id if src_record.partner_id else False)
+        src_record_id = self._get_field(src_record, 'id')
+        old_partner_id = self._get_m2o_id(self._get_field(src_record, 'partner_id', False)) or False
+        partner_id = self.get_new_partner_id_from_old_id(old_partner_id)
         if not partner_id:
-            logging.error(f"Skipping invoice old_id={src_record.id}: missing partner mapping")
+            logging.error(f"Skipping invoice old_id={src_record_id}: missing partner mapping")
             return []
         partner = self._partner_cache.get(partner_id)
         invoice_head = self._get_invoice_data(company, partner, src_record)
@@ -278,13 +344,14 @@ class AccountMoveHandler(DomainHandler):
         # Check if record already exists using old_id (via DB connection)
         conn = self._db_provider.get_connection(DESTINATION)
         # Use optimized ID-only lookup to avoid SELECT * on account_move
-        _dst_id = find_invoice_id_by_old_id(conn, src_record.id)
+        _dst_id = find_invoice_id_by_old_id(conn, src_record_id)
         existing_record = {'id': _dst_id} if _dst_id else None
 
         invoice_data = {
             'action': 'update' if existing_record else 'create',
             'model': 'account.move',
             'src_record': src_record,
+            'src_record_id': src_record_id,
             # Defer browsing to save step to avoid RPC read errors at transform time
             'dst_record': existing_record if existing_record else None,
             'data': invoice_head
@@ -295,7 +362,7 @@ class AccountMoveHandler(DomainHandler):
 
 
         src_lines = []
-        old_invoice_id = src_record.id
+        old_invoice_id = src_record_id
         if old_invoice_id:
             # Fetch account.move.line from SOURCE DB explicitly by move_id
             try:
@@ -306,11 +373,11 @@ class AccountMoveHandler(DomainHandler):
                 filtered = []
                 for l in src_lines:
                     inv_field = l.invoice_id
-                    if not inv_field or (inv_field.id == src_record.id):
+                    if not inv_field or (inv_field.id == src_record_id):
                         filtered.append(l)
                 src_lines = filtered
             except Exception as e:
-                logging.warning(f"Failed to fetch account.move.line by move_id for invoice {src_record.id}: {e}")
+                logging.warning(f"Failed to fetch account.move.line by move_id for invoice {src_record_id}: {e}")
                 src_lines = []
 
         for src_line in src_lines:
@@ -322,11 +389,10 @@ class AccountMoveHandler(DomainHandler):
             invoice_data['data']['invoice_line_ids'] = [(0, 0, vals) for vals in invoice_lines_data]
         elif invoice_data['action'] == 'update':
             # Build update commands using DB mapping: src_line.id -> dst account_move_line.id
-            conn_dst = self._db_provider.get_connection(DESTINATION)
             commands = []
             for src_line in src_lines:
                 vals = self._get_invoice_line_data(invoice_head, company, partner, src_line)
-                dst_line_id = find_id_by_old_id(conn_dst, 'account_move_line', src_line.id)
+                dst_line_id = self.get_new_move_line_id_from_old_id(src_line.id)
                 if dst_line_id:
                     commands.append((1, dst_line_id, vals))  # update in place
                 else:
@@ -349,31 +415,55 @@ class AccountMoveHandler(DomainHandler):
             data = transformed_record['data']
             action = transformed_record['action']
             src_record = transformed_record['src_record']
+            src_record_id = transformed_record.get('src_record_id')
             dst_record = transformed_record.get('dst_record')
             x_new_id = None
 
             try:
                 if action == 'create':
-                    logging.info(f"Creating account move '{getattr(src_record, 'number', src_record.id)}'...")
+                    label = self._get_field(src_record, 'number', False) or (src_record_id if src_record_id is not None else 'unknown')
+                    logging.info(f"Creating account move '{label}'...")
                     x_new_id = dst_model.create(data)
                     logging.info(f"Created account move with ID {x_new_id}")
                 elif action == 'update' and dst_record:
                     # Pure JSON-RPC: avoid browse()/recordsets; write by ids only
-                    logging.info(f"Updating account move '{getattr(src_record, 'number', src_record.id)}'...")
+                    label = self._get_field(src_record, 'number', False) or (src_record_id if src_record_id is not None else 'unknown')
+                    logging.info(f"Updating account move '{label}'...")
                     dst_model.write([dst_record['id']], data)
                     x_new_id = dst_record['id']
                     logging.info(f"Updated account move with ID {dst_record['id']}")
 
                 if x_new_id is not None:
-                    self.update_tracking_ids(
-                        x_new_id=x_new_id,
-                        record=src_record
-                    )
+                    # Tracking must work for dict-based src records
+                    if src_record_id is not None:
+                        self._update_tracking_id(
+                            connection_type=SOURCE,
+                            model_name='account.invoice',
+                            record_id=src_record_id,
+                            field_name='x_new_id',
+                            field_value=x_new_id,
+                        )
+                        self._update_tracking_id(
+                            connection_type=DESTINATION,
+                            model_name='account.move',
+                            record_id=x_new_id,
+                            field_name='x_old_id',
+                            field_value=src_record_id,
+                        )
 
-                dst_model.action_post([x_new_id])
+                    # Only post if there are invoice lines
+                    line_cmds = data.get('invoice_line_ids') if isinstance(data, dict) else None
+                    if line_cmds:
+                        dst_model.action_post([x_new_id])
+                    else:
+                        logging.warning(
+                            f"Skipping posting account move id={x_new_id} (invoice old_id={src_record_id}): no lines"
+                        )
 
             except Exception as e:
-                logging.error(f"Error processing account move '{src_record.name}': {str(e)}")
+                label = self._get_field(src_record, 'number', False) or self._get_field(src_record, 'name', False)
+                label = label or (src_record_id if src_record_id is not None else 'unknown')
+                logging.error(f"Error processing account move '{label}': {str(e)}")
                 # Continue with next record instead of failing completely
                 continue
 
